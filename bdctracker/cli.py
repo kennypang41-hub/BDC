@@ -207,6 +207,55 @@ def export(
 
 
 @app.command()
+def bundle(
+    out: Path = typer.Option(None, help="Output .html (default data/bdc-tracker.html)."),
+    period: str = typer.Option(None, help="Period to freeze. Defaults to latest."),
+    db_path: Path = typer.Option(None),
+) -> None:
+    """Build a single self-contained HTML file: styles, scripts and data inlined."""
+    from bdctracker import standalone
+
+    SETTINGS.ensure_dirs()
+    target = out or (SETTINGS.root / "bdc-tracker.html")
+    with db.session(db_path) as conn:
+        try:
+            result = standalone.write_html(conn, target, period)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1) from None
+    console.print(f"[green]wrote[/green] {result['path']} ({result['bytes'] / 1e6:.1f} MB)")
+
+
+@app.command()
+def excel(
+    out: Path = typer.Option(None, help="Output .xlsx (default data/bdc-marks-<period>.xlsx)."),
+    period: str = typer.Option(None, help="Period for the summary sheets. Defaults to latest."),
+    db_path: Path = typer.Option(None),
+) -> None:
+    """Export every mark to a workbook: Marks, BDC summary, Disagreements, Read me."""
+    from bdctracker import excel as excel_mod
+
+    with db.session(db_path) as conn:
+        target = out
+        if target is None:
+            latest = period or analytics.latest_period(conn)
+            SETTINGS.ensure_dirs()
+            target = SETTINGS.root / f"bdc-marks-{latest or 'empty'}.xlsx"
+        try:
+            result = excel_mod.export_workbook(conn, target, period)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1) from None
+
+    console.print(f"[green]wrote[/green] {result['marks']:,} marks to {result['path']}")
+    if result["synthetic"]:
+        console.print(
+            "[yellow]This workbook contains SYNTHETIC data from `bdc demo`, "
+            "not marks extracted from SEC filings.[/yellow]"
+        )
+
+
+@app.command()
 def serve(
     host: str = typer.Option("127.0.0.1"),
     port: int = typer.Option(8000),

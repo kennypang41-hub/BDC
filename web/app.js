@@ -9,6 +9,12 @@ const Data = {
   cache: new Map(),
 
   async init() {
+    // A standalone build inlines the whole bundle, so there is nothing to fetch.
+    if (globalThis.__BDC_BUNDLE__) {
+      this.mode = "embedded";
+      this.meta = globalThis.__BDC_BUNDLE__.meta;
+      return;
+    }
     try {
       const response = await fetch("data/meta.json", { cache: "no-store" });
       if (response.ok) {
@@ -30,6 +36,11 @@ const Data = {
   },
 
   async get(name) {
+    if (this.mode === "embedded") {
+      const value = globalThis.__BDC_BUNDLE__[name];
+      if (value === undefined) throw new Error(`${name}: not in the embedded bundle`);
+      return value;
+    }
     const key = `${name}@${this.period || "latest"}`;
     if (!this.cache.has(key)) {
       const response = await fetch(this.url(name));
@@ -40,6 +51,9 @@ const Data = {
   },
 
   async positions(ticker) {
+    if (this.mode === "embedded") {
+      return globalThis.__BDC_BUNDLE__.positions[ticker] || [];
+    }
     return this.get(`positions/${ticker}`);
   },
 };
@@ -447,8 +461,9 @@ async function boot() {
     const banner = document.getElementById("banner");
     banner.hidden = false;
     banner.textContent =
-      "Synthetic demo data — generated locally, not extracted from SEC filings. " +
-      "Run `bdc harvest` to replace it with real marks.";
+      "⚠ SYNTHETIC DEMO DATA — every borrower, mark and figure on this page was " +
+      "generated locally to develop the interface. Nothing here was extracted from an " +
+      "SEC filing. Do not use for analysis. Run `bdc harvest` to load real marks.";
   }
 
   const period = document.getElementById("period");
@@ -459,10 +474,10 @@ async function boot() {
     return option;
   }));
   period.value = Data.meta.period_end;
-  period.disabled = Data.mode === "static";
-  period.title = Data.mode === "static"
-    ? "The static export is frozen to one quarter; run the API to switch periods."
-    : "Choose a quarter";
+  period.disabled = Data.mode !== "api";
+  period.title = Data.mode === "api"
+    ? "Choose a quarter"
+    : "This build is frozen to one quarter; run `bdc serve` to switch periods.";
   period.addEventListener("change", () => {
     Data.period = period.value;
     Data.cache.clear();

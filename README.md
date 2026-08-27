@@ -108,11 +108,12 @@ bdc report bdcs                         # every BDC side by side
 bdc serve                               # http://127.0.0.1:8000
 ```
 
-To browse without a server, freeze the views to JSON and open `web/index.html`
-from any static host:
+Get the data out:
 
 ```bash
-bdc export --out web/data
+bdc excel                  # every mark as .xlsx — Marks, BDC summary, Disagreements, Read me
+bdc bundle                 # the whole site as one self-contained .html file
+bdc export --out web/data  # the views as JSON, for static hosting of web/index.html
 ```
 
 No EDGAR access handy? Load a synthetic dataset of the same shape to try the UI.
@@ -132,6 +133,8 @@ bdc demo && bdc export --out web/data
 | `bdc universe list` / `sync` | Show the covered BDCs; verify CIKs against the SEC BDC Report |
 | `bdc stats` | Row counts, period coverage, latest portfolio fair value |
 | `bdc report <view>` | `bdcs`, `nonaccruals`, `disagreements`, `markdowns`, `maturities`, `deteriorating` |
+| `bdc excel` | Every mark as a workbook, one row per (loan, quarter) |
+| `bdc bundle` | The whole site as one self-contained HTML file — no server needed |
 | `bdc export` | Freeze every view to JSON for static hosting |
 | `bdc serve` | FastAPI app + front end |
 | `bdc demo` | Synthetic dataset for UI work |
