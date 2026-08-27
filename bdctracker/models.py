@@ -1,0 +1,99 @@
+"""Core records that flow through the pipeline."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field, asdict
+from datetime import date
+from decimal import Decimal
+
+
+@dataclass(slots=True)
+class Position:
+    """One investment held by one BDC at one balance-sheet date — i.e. one mark."""
+
+    cik: int
+    period_end: date
+    identifier: str
+
+    issuer_name: str = ""
+    investment_type: str = "UNKNOWN"
+    lien: str = "NA"
+    facility: str | None = None
+    tranche_text: str | None = None
+    industry: str | None = None
+    currency: str = "USD"
+
+    fair_value: Decimal | None = None
+    cost: Decimal | None = None
+    principal: Decimal | None = None
+    shares: Decimal | None = None
+
+    interest_rate: float | None = None
+    spread: float | None = None
+    reference_rate: str | None = None
+    pik_rate: float | None = None
+    pct_net_assets: float | None = None
+
+    maturity_date: date | None = None
+    acquisition_date: date | None = None
+    fair_value_level: str | None = None
+    is_non_accrual: bool | None = None
+
+    accession: str | None = None
+    form: str | None = None
+    filed_date: date | None = None
+    source: str = "unknown"
+
+    # Derived keys, filled by normalize.finalize()
+    loan_id: str = ""
+    issuer_id: str = ""
+    credit_id: str = ""
+    is_debt: bool = False
+
+    flags: list[str] = field(default_factory=list)
+
+    @property
+    def mark(self) -> float | None:
+        """Fair value as a percentage of the position's par (or cost for equity).
+
+        This is "the mark" the whole tracker is built on: 100 means held at par,
+        below 100 means the BDC has written the position down.
+        """
+        base = self.principal if self.is_debt else None
+        if base is None or base == 0:
+            base = self.cost
+        if base is None or base == 0 or self.fair_value is None:
+            return None
+        return float(self.fair_value) / float(base) * 100.0
+
+    @property
+    def unrealized(self) -> Decimal | None:
+        if self.fair_value is None or self.cost is None:
+            return None
+        return self.fair_value - self.cost
+
+    def to_row(self) -> dict:
+        row = asdict(self)
+        row["flags"] = ",".join(self.flags)
+        row["mark"] = self.mark
+        unreal = self.unrealized
+        row["unrealized"] = None if unreal is None else str(unreal)
+        for key in ("fair_value", "cost", "principal", "shares"):
+            value = row.get(key)
+            row[key] = None if value is None else str(value)
+        for key in ("period_end", "maturity_date", "acquisition_date", "filed_date"):
+            value = row.get(key)
+            row[key] = None if value is None else value.isoformat()
+        return row
+
+
+@dataclass(slots=True)
+class FilingRef:
+    """Provenance for a batch of positions."""
+
+    accession: str
+    cik: int
+    form: str | None = None
+    period_end: date | None = None
+    filed_date: date | None = None
+    source: str = "unknown"
+    url: str | None = None

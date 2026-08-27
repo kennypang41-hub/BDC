@@ -1,0 +1,308 @@
+{
+  "description": "BDC coverage universe. cik values are authoritative SEC CIKs; run `bdc universe sync` to verify against the SEC BDC Report (Form N-54A filers, file numbers 814-*) and refresh names.",
+  "source": "SEC company_tickers.json snapshot bundled with edgartools",
+  "bdcs": [
+    {
+      "ticker": "ARCC",
+      "cik": 1287750,
+      "name": "ARES CAPITAL CORP",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "OBDC",
+      "cik": 1655888,
+      "name": "Blue Owl Capital Corp",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "OTF",
+      "cik": 1747777,
+      "name": "Blue Owl Technology Finance Corp.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "FSK",
+      "cik": 1422183,
+      "name": "FS KKR Capital Corp",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "BXSL",
+      "cik": 1736035,
+      "name": "Blackstone Secured Lending Fund",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "MAIN",
+      "cik": 1396440,
+      "name": "Main Street Capital CORP",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "GBDC",
+      "cik": 1476765,
+      "name": "GOLUB CAPITAL BDC, Inc.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "HTGC",
+      "cik": 1280784,
+      "name": "Hercules Capital, Inc.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "PSEC",
+      "cik": 1287032,
+      "name": "PROSPECT CAPITAL CORP",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "NMFC",
+      "cik": 1496099,
+      "name": "New Mountain Finance Corp",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "OCSL",
+      "cik": 1414932,
+      "name": "Oaktree Specialty Lending Corp",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "TSLX",
+      "cik": 1508655,
+      "name": "Sixth Street Specialty Lending, Inc.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "BBDC",
+      "cik": 1379785,
+      "name": "Barings BDC, Inc.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "CGBD",
+      "cik": 1544206,
+      "name": "Carlyle Secured Lending, Inc.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "MFIC",
+      "cik": 1278752,
+      "name": "MidCap Financial Investment Corp",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "GSBD",
+      "cik": 1572694,
+      "name": "Goldman Sachs BDC, Inc.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "SLRC",
+      "cik": 1418076,
+      "name": "SLR Investment Corp.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "PNNT",
+      "cik": 1383414,
+      "name": "PENNANTPARK INVESTMENT CORP",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "PFLT",
+      "cik": 1504619,
+      "name": "PennantPark Floating Rate Capital Ltd.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "TCPC",
+      "cik": 1370755,
+      "name": "BlackRock TCP Capital Corp.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "CION",
+      "cik": 1534254,
+      "name": "CION Investment Corp",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "TRIN",
+      "cik": 1786108,
+      "name": "Trinity Capital Inc.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "CSWC",
+      "cik": 17313,
+      "name": "CAPITAL SOUTHWEST CORP",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "FDUS",
+      "cik": 1513363,
+      "name": "FIDUS INVESTMENT Corp",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "SAR",
+      "cik": 1377936,
+      "name": "SARATOGA INVESTMENT CORP.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "GAIN",
+      "cik": 1321741,
+      "name": "GLADSTONE INVESTMENT CORPORATIONDE",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "GLAD",
+      "cik": 1143513,
+      "name": "GLADSTONE CAPITAL CORP",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "HRZN",
+      "cik": 1487428,
+      "name": "Horizon Technology Finance Corp",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "OFS",
+      "cik": 1487918,
+      "name": "OFS Capital Corp",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "RWAY",
+      "cik": 1653384,
+      "name": "Runway Growth Finance Corp.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "SCM",
+      "cik": 1551901,
+      "name": "Stellus Capital Investment Corp",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "TPVG",
+      "cik": 1580345,
+      "name": "TriplePoint Venture Growth BDC Corp.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "WHF",
+      "cik": 1552198,
+      "name": "WhiteHorse Finance, Inc.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "ICMB",
+      "cik": 1578348,
+      "name": "Investcorp Credit Management BDC, Inc.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "NCDL",
+      "cik": 1737924,
+      "name": "Nuveen Churchill Direct Lending Corp.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "PSBD",
+      "cik": 1794776,
+      "name": "Palmer Square Capital BDC Inc.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "KBDC",
+      "cik": 1747172,
+      "name": "Kayne Anderson BDC, Inc.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "MSDL",
+      "cik": 1782524,
+      "name": "Morgan Stanley Direct Lending Fund",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "BCSF",
+      "cik": 1655050,
+      "name": "Bain Capital Specialty Finance, Inc.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "CCAP",
+      "cik": 1633336,
+      "name": "Crescent Capital BDC, Inc.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "MSIF",
+      "cik": 1535778,
+      "name": "MSC INCOME FUND, INC.",
+      "exchange": "NYSE"
+    },
+    {
+      "ticker": "OXSQ",
+      "cik": 1259429,
+      "name": "Oxford Square Capital Corp.",
+      "exchange": "Nasdaq"
+    },
+    {
+      "ticker": "GECC",
+      "cik": 1675033,
+      "name": "Great Elm Capital Corp.",
+      "exchange": "Nasdaq"
+    }
+  ],
+  "watchlist": [
+    {
+      "ticker": "MRCC",
+      "name": "Monroe Capital Corp",
+      "cik": null,
+      "note": "not present in the bundled ticker snapshot; resolve via `bdc universe sync` before adding"
+    },
+    {
+      "ticker": "PTMN",
+      "name": "Portman Ridge Finance Corp",
+      "cik": null,
+      "note": "not present in the bundled ticker snapshot; resolve via `bdc universe sync` before adding"
+    },
+    {
+      "ticker": "FRBP",
+      "name": "Franklin BSP Capital Corp",
+      "cik": 1825248,
+      "note": "non-traded/OTC; add if non-traded BDCs are in scope"
+    },
+    {
+      "ticker": "SSSS",
+      "name": "SuRo Capital Corp",
+      "cik": 1509470,
+      "note": "equity-focused; almost no loan marks"
+    },
+    {
+      "ticker": "EQS",
+      "name": "Equus Total Return",
+      "cik": 878932,
+      "note": "equity-focused; almost no loan marks"
+    },
+    {
+      "ticker": "RAND",
+      "name": "Rand Capital Corp",
+      "cik": 81955,
+      "note": "micro-cap, sparse XBRL SOI tagging"
+    },
+    {
+      "ticker": "PFX",
+      "name": "PhenixFIN Corp",
+      "cik": 1490349,
+      "note": "micro-cap; internally managed"
+    }
+  ]
+}

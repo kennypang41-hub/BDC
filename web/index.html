@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BDC Tracker — loan marks from SEC filings</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232a78d6'/%3E%3Cpath d='M6 22h4v4H6zm6-6h4v10h-4zm6-8h4v18h-4zm6 11h4v7h-4z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>BDC Tracker</h1>
+  <span class="sub" id="subtitle">loading…</span>
+  <span class="spacer"></span>
+  <label class="sub" for="period">Quarter</label>
+  <select id="period"></select>
+  <button class="ghost" id="theme" title="Toggle theme">◐</button>
+</header>
+
+<p class="banner" id="banner" hidden></p>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-view="overview" aria-selected="true">Overview</button>
+  <button role="tab" data-view="bdcs">BDCs</button>
+  <button role="tab" data-view="nonaccruals">Non-accruals</button>
+  <button role="tab" data-view="marks">Marks</button>
+  <button role="tab" data-view="maturities">Maturities</button>
+  <button role="tab" data-view="disagreements">Disagreements</button>
+  <button role="tab" data-view="positions">Positions</button>
+</nav>
+
+<main>
+  <section id="view-overview">
+    <div class="tiles" id="overview-tiles"></div>
+    <div class="grid-2">
+      <figure class="card">
+        <figcaption>Non-accrual share of portfolio fair value</figcaption>
+        <p class="desc">Across every covered BDC, quarter by quarter. Rising means credit is going bad faster than it is being resolved.</p>
+        <div id="chart-na-trend"></div>
+        <details class="tableview"><summary>Table view</summary><div class="tablewrap" id="table-na-trend"></div></details>
+      </figure>
+      <figure class="card">
+        <figcaption>Distribution of debt marks</figcaption>
+        <p class="desc">Every debt position's latest mark, as a percentage of par. The left tail is where the losses are.</p>
+        <div id="chart-histogram"></div>
+        <details class="tableview"><summary>Table view</summary><div class="tablewrap" id="table-histogram"></div></details>
+      </figure>
+    </div>
+    <figure class="card">
+      <figcaption>Largest quarter-over-quarter mark declines</figcaption>
+      <p class="desc">Debt positions whose mark fell furthest since the prior quarter.</p>
+      <div class="tablewrap" id="table-deteriorating"></div>
+    </figure>
+  </section>
+
+  <section id="view-bdcs" hidden>
+    <figure class="card">
+      <figcaption>Every BDC side by side</figcaption>
+      <p class="desc">Portfolio mark is fair value over par across debt positions. Click a row to open its positions.</p>
+      <div class="tablewrap" id="table-bdcs"></div>
+    </figure>
+  </section>
+
+  <section id="view-nonaccruals" hidden>
+    <div class="tiles" id="na-tiles"></div>
+    <div class="grid-2">
+      <figure class="card">
+        <figcaption>Non-accrual concentration by industry</figcaption>
+        <p class="desc">Share of each industry's fair value sitting on non-accrual.</p>
+        <div class="tablewrap" id="table-na-industry"></div>
+      </figure>
+      <figure class="card">
+        <figcaption>Non-accrual concentration by BDC</figcaption>
+        <p class="desc">Which lenders are carrying the problem credits.</p>
+        <div class="tablewrap" id="table-na-bdc"></div>
+      </figure>
+    </div>
+    <figure class="card">
+      <figcaption>Currently non-accrual positions</figcaption>
+      <p class="desc">With how many quarters each has been on non-accrual.</p>
+      <div class="tablewrap" id="table-na-positions"></div>
+    </figure>
+  </section>
+
+  <section id="view-marks" hidden>
+    <figure class="card">
+      <figcaption>Weighted average mark by sector</figcaption>
+      <p class="desc">Darker is a higher mark. Reading left to right shows which sectors are rolling over.</p>
+      <div id="chart-sectors"></div>
+      <details class="tableview"><summary>Table view</summary><div class="tablewrap" id="table-sectors"></div></details>
+    </figure>
+    <figure class="card">
+      <figcaption>Furthest below cost</figcaption>
+      <p class="desc">Positions whose fair value sits furthest below what the BDC paid.</p>
+      <div class="tablewrap" id="table-markdowns"></div>
+    </figure>
+  </section>
+
+  <section id="view-maturities" hidden>
+    <figure class="card">
+      <figcaption>Maturity wall</figcaption>
+      <p class="desc">Debt fair value grouped by the year it matures, with the stressed slice split out.</p>
+      <div class="legend">
+        <span><i style="background:var(--series-1)"></i> All debt</span>
+        <span><i style="background:var(--critical)"></i> ⚠ Stressed (mark below 90)</span>
+      </div>
+      <div id="chart-maturity"></div>
+      <details class="tableview"><summary>Table view</summary><div class="tablewrap" id="table-maturity"></div></details>
+    </figure>
+  </section>
+
+  <section id="view-disagreements" hidden>
+    <figure class="card">
+      <figcaption>Where BDCs disagree</figcaption>
+      <p class="desc">Credits held by two or more BDCs, ranked by how far apart their marks are. The bar spans the lowest to the highest mark; the tick is the fair-value-weighted average.</p>
+      <div class="tablewrap" id="table-disagreements"></div>
+    </figure>
+  </section>
+
+  <section id="view-positions" hidden>
+    <div class="controls">
+      <label for="ticker">BDC</label>
+      <select id="ticker"></select>
+      <input type="search" id="filter" placeholder="Filter by borrower, industry or type…" size="34">
+      <span class="muted" id="position-count"></span>
+    </div>
+    <div class="tablewrap" id="table-positions"></div>
+  </section>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
