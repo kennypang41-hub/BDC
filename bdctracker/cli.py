@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from bdctracker import analytics, db, export as export_mod, pipeline
-from bdctracker.config import SETTINGS
+from bdctracker.config import SETTINGS, SecUnreachable, check_sec_reachable
 from bdctracker.sources.dera import Quarter, latest_published_quarter
 from bdctracker.universe import UNIVERSE_PATH, load_universe, sync_universe
 
@@ -62,6 +62,8 @@ def harvest(
     refresh: bool = typer.Option(False, help="Re-download cached data sets."),
     workers: int = typer.Option(4, help="Parallel filing downloads (SEC allows ~10 req/s)."),
     limit_per_bdc: int = typer.Option(None, help="Cap filings per BDC; useful for a smoke test."),
+    preflight: bool = typer.Option(True, "--preflight/--no-preflight",
+                                   help="Probe sec.gov once before starting."),
     db_path: Path = typer.Option(None, help="SQLite file to write (default data/bdc.db)."),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
@@ -78,7 +80,14 @@ def harvest(
             refresh=refresh,
             workers=workers,
             limit_per_bdc=limit_per_bdc,
+            preflight=preflight,
         )
+    except SecUnreachable as exc:
+        console.print(f"[red]Cannot reach the SEC.[/red] {exc}")
+        raise typer.Exit(3) from None
+    except SecUnreachable as exc:
+        console.print(f"[red]Cannot reach the SEC.[/red] {exc}")
+        raise typer.Exit(3) from None
     except RuntimeError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from None
@@ -115,6 +124,9 @@ def backfill(
             since=_date.fromisoformat(since) if since else None,
             workers=workers,
         )
+    except SecUnreachable as exc:
+        console.print(f"[red]Cannot reach the SEC.[/red] {exc}")
+        raise typer.Exit(3) from None
     except RuntimeError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from None
@@ -227,6 +239,26 @@ def demo(
 def quarters() -> None:
     """Show the newest quarter the SEC is likely to have published."""
     console.print(str(latest_published_quarter()))
+
+
+@app.command()
+def doctor() -> None:
+    """Check that this machine can actually reach EDGAR."""
+    from bdctracker.config import IDENTITY_ENV, configure_edgar
+
+    try:
+        identity = configure_edgar()
+    except RuntimeError as exc:
+        console.print(f"[red]✗[/red] {exc}")
+        raise typer.Exit(2) from None
+    console.print(f"[green]✓[/green] {IDENTITY_ENV} = {identity}")
+
+    try:
+        check_sec_reachable()
+    except SecUnreachable as exc:
+        console.print(f"[red]✗[/red] {exc}")
+        raise typer.Exit(3) from None
+    console.print("[green]✓[/green] sec.gov is reachable")
 
 
 if __name__ == "__main__":

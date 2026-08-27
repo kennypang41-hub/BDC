@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from bdctracker import db, normalize
+from bdctracker.config import check_sec_reachable, configure_edgar
 from bdctracker.models import Position
 from bdctracker.sources import dera, xbrl
 from bdctracker.universe import BDC, load_universe
@@ -118,6 +119,7 @@ def run(
     refresh: bool = False,
     workers: int = 4,
     limit_per_bdc: int | None = None,
+    preflight: bool = True,
 ) -> dict:
     """Build (or extend) the mark dataset.
 
@@ -125,6 +127,12 @@ def run(
     has not published yet. Both write to the same tables, and marks are keyed
     on (loan, period), so the two paths reconcile instead of double-counting.
     """
+    if preflight and (use_dera or use_filings):
+        # One probe up front. Without it a blocked network is only discovered
+        # twelve quarters and forty-three companies later, one retry at a time.
+        configure_edgar()
+        check_sec_reachable()
+
     universe = load_universe()
     if tickers:
         wanted = {t.upper() for t in tickers}

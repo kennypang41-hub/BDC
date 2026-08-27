@@ -57,6 +57,22 @@ filers routinely tag the percentage instead. `to_rate_pct` takes anything above
 1.5 at face value: a genuine sub-1.5% coupon is vanishingly rare in a BDC book,
 and the alternative — reading `11.25` as 1125% — is far more damaging.
 
+## Failing fast
+
+`harvest` probes `https://www.sec.gov/files/company_tickers.json` once before it
+does anything (`--no-preflight` to skip). A blocked egress proxy answers CONNECT
+with 403 or 407, and no amount of backoff changes that, so the run stops there
+with a diagnosis rather than rediscovering it once per request across twelve
+quarters and forty-three companies.
+
+`bdc doctor` runs the same two checks on their own: identity is set, and sec.gov
+answers. Exit codes: `2` for a configuration problem, `3` for an unreachable SEC.
+
+Inside the harvest, a quarter that 404s is treated as **not published yet** and
+skipped; anything else — a proxy denial, a connection failure, a 5xx — raises.
+The distinction matters: a blocked network reported as a list of "missing
+quarters" looks like a data gap rather than an outage.
+
 ## Rate limiting
 
 The SEC asks for no more than ten requests a second and rejects traffic without

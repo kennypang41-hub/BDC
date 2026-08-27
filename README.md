@@ -76,6 +76,10 @@ two failure modes that actually corrupt the dataset:
   whole filing's marks come out near 0.1. Each filing's median debt mark is
   checked against par and rescaled if it is off by a factor of 100 or 1000, with
   a `rescaled_x1000` flag on every affected row.
+- **Blocked vs. unpublished.** A quarter the SEC has not published yet 404s and
+  is skipped; a proxy denial or connection failure raises instead of quietly
+  becoming a "missing quarter". `harvest` probes sec.gov once before it starts,
+  so a blocked network costs two seconds rather than several minutes of retries.
 - **Unknown vs. zero.** Non-accrual status lives in footnotes, not in a tagged
   flag. A filing that names even one non-accrual is telling us it discloses
   them, so the rest of that schedule is marked accruing; a filing that names
@@ -96,6 +100,7 @@ pip install -e ".[web,dev]"
 # The SEC blocks unidentified traffic. This is mandatory.
 export EDGAR_IDENTITY="Your Name your@email.com"
 
+bdc doctor                              # confirm this machine can reach EDGAR
 bdc universe list                       # the 43 covered BDCs
 bdc harvest --start 2023Q4              # extract marks into data/bdc.db
 bdc stats                               # what landed
@@ -130,6 +135,7 @@ bdc demo && bdc export --out web/data
 | `bdc export` | Freeze every view to JSON for static hosting |
 | `bdc serve` | FastAPI app + front end |
 | `bdc demo` | Synthetic dataset for UI work |
+| `bdc doctor` | Check `EDGAR_IDENTITY` and that sec.gov is actually reachable |
 
 ## The tracker
 

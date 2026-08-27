@@ -21,7 +21,7 @@ from typing import Iterable, Sequence
 import pandas as pd
 
 from bdctracker import normalize
-from bdctracker.config import SETTINGS, configure_edgar
+from bdctracker.config import SETTINGS, SecUnreachable, configure_edgar
 from bdctracker.models import Position
 
 log = logging.getLogger(__name__)
@@ -98,6 +98,11 @@ def download_quarter(quarter: Quarter, *, refresh: bool = False) -> Path | None:
 
     Returns ``None`` when the SEC has not published that quarter yet, which is
     the normal state for the most recent one or two quarters.
+
+    Raises :class:`SecUnreachable` for anything that is not a plain "not
+    published" — an unpublished quarter is expected and skippable, a blocked
+    network is not, and treating the two alike hides the real problem behind a
+    list of missing quarters.
     """
     SETTINGS.ensure_dirs()
     target = SETTINGS.dera_dir / quarter.filename
@@ -105,14 +110,28 @@ def download_quarter(quarter: Quarter, *, refresh: bool = False) -> Path | None:
         return target
 
     configure_edgar()
+    import httpx
     from edgar.httprequests import get_with_retry
 
     try:
         response = get_with_retry(quarter.url)
-        response.raise_for_status()
-    except Exception as exc:  # network, 404 for unpublished quarters, etc.
-        log.warning("BDC data set %s unavailable: %s", quarter, exc)
+    except httpx.HTTPStatusError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            log.info("BDC data set %s not published yet", quarter)
+            return None
+        raise SecUnreachable(f"fetching {quarter}: {exc}") from None
+    except httpx.ProxyError as exc:
+        raise SecUnreachable(
+            f"Blocked before reaching the SEC while fetching {quarter}: {exc}"
+        ) from None
+    except httpx.HTTPError as exc:
+        raise SecUnreachable(f"fetching {quarter}: {type(exc).__name__}: {exc}") from None
+
+    if response.status_code == 404:
+        log.info("BDC data set %s not published yet", quarter)
         return None
+    if response.status_code >= 400:
+        raise SecUnreachable(f"{quarter.url} returned HTTP {response.status_code}")
 
     target.write_bytes(response.content)
     log.info("Cached %s (%.1f MB)", quarter, len(response.content) / 1e6)
