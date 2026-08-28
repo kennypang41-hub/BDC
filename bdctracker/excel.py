@@ -115,7 +115,14 @@ def _style_header(sheet: Worksheet, columns: list[tuple]) -> None:
     sheet.freeze_panes = "A2"
 
 
-def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> int:
+def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> tuple[int, dict[str, tuple[int, int]]]:
+    """Write the fact table; return the row count and each period's row block.
+
+    The query orders by period, so every period occupies a contiguous run of
+    rows. Handing those bounds to the summary sheet lets its SUMIFS scan one
+    quarter instead of the whole history — the difference between a workbook
+    that opens instantly and one that recalculates for minutes.
+    """
     sheet = workbook.create_sheet("Marks")
     _style_header(sheet, MARK_COLUMNS)
 
@@ -125,10 +132,16 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> int:
     mark = _letter("Mark (% of par)")
     unrealised = _letter("Unrealised")
 
+    blocks: dict[str, list[int]] = {}
     row_number = 1
     for record in conn.execute(MARKS_SQL):
         row_number += 1
         row = dict(record)
+        period = row["period_end"]
+        if period in blocks:
+            blocks[period][1] = row_number
+        else:
+            blocks[period] = [row_number, row_number]
         values = []
         for header, source, number_format, _width in MARK_COLUMNS:
             if source is None:
@@ -153,7 +166,7 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> int:
     # Highlight the mark itself — it is what the whole workbook is for.
     for cell in sheet[mark][1:]:
         cell.font = Font(name=FONT, bold=True)
-    return row_number - 1
+    return row_number - 1, {k: (v[0], v[1]) for k, v in blocks.items()}
 
 
 SUMMARY_COLUMNS = [
@@ -168,24 +181,29 @@ SUMMARY_COLUMNS = [
     ("Unrealised", None, MONEY_SIGNED, 16),
     ("Non-accrual FV", None, MONEY, 16),
     ("Non-accrual %", None, PCT1, 14),
+    ("Status disclosed", None, INT, 16),
     ("Borrowers", None, INT, 12),
 ]
 
 
-def _write_summary(workbook: Workbook, conn: sqlite3.Connection, marks_rows: int,
-                   period: str) -> None:
-    """Per-BDC totals, computed from the Marks sheet with live SUMIFS."""
+def _write_summary(workbook: Workbook, conn: sqlite3.Connection,
+                   block: tuple[int, int], period: str) -> None:
+    """Per-BDC totals, computed from the Marks sheet with live SUMIFS.
+
+    Ranges cover only this period's rows. The period criterion is kept anyway,
+    so a stray row inside the block still cannot be counted twice.
+    """
     sheet = workbook.create_sheet("BDC summary")
     _style_header(sheet, SUMMARY_COLUMNS)
 
-    last = marks_rows + 1
-    period_range = f"Marks!${_letter('Period end')}$2:${_letter('Period end')}${last}"
-    ticker_range = f"Marks!${_letter('BDC')}$2:${_letter('BDC')}${last}"
+    first, last = block
+    period_range = f"Marks!${_letter('Period end')}${first}:${_letter('Period end')}${last}"
+    ticker_range = f"Marks!${_letter('BDC')}${first}:${_letter('BDC')}${last}"
 
     def sumifs(column_header: str, row: int, extra: str = "") -> str:
         column = _letter(column_header)
         return (
-            f"=SUMIFS(Marks!${column}$2:${column}${last},"
+            f"=SUMIFS(Marks!${column}${first}:${column}${last},"
             f"{period_range},$N$1,{ticker_range},$A{row}{extra})"
         )
 
@@ -204,8 +222,8 @@ def _write_summary(workbook: Workbook, conn: sqlite3.Connection, marks_rows: int
         (period,),
     ).fetchall()
 
-    na_range = f"Marks!${_letter('Non-accrual')}$2:${_letter('Non-accrual')}${last}"
-    debt_range = f"Marks!${_letter('Debt')}$2:${_letter('Debt')}${last}"
+    na_range = f"Marks!${_letter('Non-accrual')}${first}:${_letter('Non-accrual')}${last}"
+    debt_range = f"Marks!${_letter('Debt')}${first}:${_letter('Debt')}${last}"
     fv = _letter("Fair value")
 
     for index, record in enumerate(rows, start=2):
@@ -217,15 +235,26 @@ def _write_summary(workbook: Workbook, conn: sqlite3.Connection, marks_rows: int
         sheet.cell(row=index, column=5, value=sumifs("Cost", index))
         sheet.cell(row=index, column=6, value=sumifs("Fair value", index))
         # Portfolio mark is debt fair value over debt par — equity has no par.
-        debt_fv = (f"SUMIFS(Marks!${fv}$2:${fv}${last},{period_range},$N$1,"
+        debt_fv = (f"SUMIFS(Marks!${fv}${first}:${fv}${last},{period_range},$N$1,"
                    f"{ticker_range},$A{index},{debt_range},1)")
         sheet.cell(row=index, column=7, value=f"=IFERROR({debt_fv}/$D{index}*100,\"\")")
         sheet.cell(row=index, column=8, value=f"=IFERROR($F{index}/$E{index},\"\")")
         sheet.cell(row=index, column=9, value=f"=$F{index}-$E{index}")
+        # Non-accrual status lives in footnotes. Where a filing disclosed none,
+        # 0% would assert a clean book we cannot see, so both cells stay blank
+        # and "Status disclosed" says how many rows we actually know about.
+        disclosed = (
+            f'=COUNTIFS({period_range},$N$1,{ticker_range},$A{index},{na_range},"Yes")'
+            f'+COUNTIFS({period_range},$N$1,{ticker_range},$A{index},{na_range},"No")'
+        )
+        sheet.cell(row=index, column=12, value=disclosed)
         sheet.cell(row=index, column=10,
-                   value=sumifs("Fair value", index, f",{na_range},\"Yes\""))
-        sheet.cell(row=index, column=11, value=f"=IFERROR($J{index}/$F{index},\"\")")
-        sheet.cell(row=index, column=12, value=record["issuers"])
+                   value=f'=IF($L{index}=0,"",'
+                         + sumifs("Fair value", index, f',{na_range},"Yes"').lstrip("=")
+                         + ")")
+        sheet.cell(row=index, column=11,
+                   value=f'=IF($L{index}=0,"",IFERROR($J{index}/$F{index},""))')
+        sheet.cell(row=index, column=13, value=record["issuers"])
 
         for column, (_h, _s, number_format, _w) in enumerate(SUMMARY_COLUMNS, start=1):
             cell = sheet.cell(row=index, column=column)
@@ -235,16 +264,16 @@ def _write_summary(workbook: Workbook, conn: sqlite3.Connection, marks_rows: int
 
     total = len(rows) + 2
     sheet.cell(row=total, column=1, value="Total").font = Font(name=FONT, bold=True)
-    for column in (3, 4, 5, 6, 9, 10, 12):
+    for column in (3, 4, 5, 6, 9, 10, 12, 13):
         letter = get_column_letter(column)
         cell = sheet.cell(row=total, column=column,
                           value=f"=SUM({letter}2:{letter}{total - 1})")
         cell.font = Font(name=FONT, bold=True)
         cell.number_format = SUMMARY_COLUMNS[column - 1][2] or INT
         cell.border = Border(top=THIN)
-    for column, formula in ((7, f"=IFERROR(F{total}/D{total}*100,\"\")"),
-                            (8, f"=IFERROR(F{total}/E{total},\"\")"),
-                            (11, f"=IFERROR(J{total}/F{total},\"\")")):
+    for column, formula in ((7, f'=IFERROR(F{total}/D{total}*100,"")'),
+                            (8, f'=IFERROR(F{total}/E{total},"")'),
+                            (11, f'=IF(L{total}=0,"",IFERROR(J{total}/F{total},""))')):
         cell = sheet.cell(row=total, column=column, value=formula)
         cell.font = Font(name=FONT, bold=True)
         cell.number_format = SUMMARY_COLUMNS[column - 1][2]
@@ -273,7 +302,7 @@ def _write_disagreements(workbook: Workbook, conn: sqlite3.Connection, period: s
 
 
 def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
-                  marks_rows: int, sources: list[str]) -> None:
+                  sources: list[str]) -> None:
     sheet = workbook.create_sheet("Read me", 0)
     sheet.column_dimensions["A"].width = 26
     sheet.column_dimensions["B"].width = 96
@@ -367,10 +396,10 @@ def export_workbook(conn: sqlite3.Connection, path: str | Path,
 
     workbook = Workbook()
     workbook.remove(workbook.active)
-    marks_rows = _write_marks(workbook, conn)
-    _write_summary(workbook, conn, marks_rows, period)
+    marks_rows, blocks = _write_marks(workbook, conn)
+    _write_summary(workbook, conn, blocks[period], period)
     _write_disagreements(workbook, conn, period)
-    _write_readme(workbook, conn, period, marks_rows, sources)
+    _write_readme(workbook, conn, period, sources)
     workbook.save(path)
 
     return {

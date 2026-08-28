@@ -8,8 +8,9 @@ from decimal import Decimal
 
 import pytest
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
-from bdctracker import db, excel, normalize, standalone
+from bdctracker import analytics, db, excel, normalize, standalone
 from bdctracker.models import Position
 from bdctracker.universe import BDC
 
@@ -188,3 +189,119 @@ def test_standalone_escapes_a_closing_script_tag_in_the_data(conn):
     payload = re.search(r"window\.__BDC_BUNDLE__ = (.*?);</script>", html, re.S).group(1)
     assert "</script>" not in payload
     assert json.loads(payload.replace("<\\/", "</"))
+
+
+# ---------------------------------------------------------------------------
+# Formula correctness — evaluated independently, checked against SQL
+# ---------------------------------------------------------------------------
+#
+# Evaluated with the `formulas` engine rather than LibreOffice: the workbook is
+# only trustworthy if its formulas produce the same numbers the database does,
+# and that has to be checked by something other than the code that wrote them.
+
+
+def _evaluate(path) -> dict:
+    """Return {SHEET!CELL: value} for every computed cell in the workbook."""
+    formulas = pytest.importorskip("formulas")
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        solution = formulas.ExcelModel().loads(str(path)).finish().calculate()
+
+    # Keys look like "'[book.xlsx]BDC SUMMARY'!A2"; reduce to "BDC SUMMARY!A2".
+    out = {}
+    for key, ranges in solution.items():
+        name = key.upper().split("]", 1)[-1].replace("'", "")
+        try:
+            value = ranges.value[0, 0]
+        except Exception:
+            continue
+        out[name] = value
+    return out
+
+
+def _column(sheet, header: str) -> int:
+    return [cell.value for cell in sheet[1]].index(header) + 1
+
+
+@pytest.mark.slow
+def test_row_formulas_compute_the_mark_the_database_computed(conn, tmp_path):
+    target = tmp_path / "recalc.xlsx"
+    excel.export_workbook(conn, target)
+    values = _evaluate(target)
+
+    sheet = load_workbook(target)["Marks"]
+    borrower = _column(sheet, "Borrower")
+    instrument = _column(sheet, "Instrument")
+    mark = get_column_letter(_column(sheet, "Mark (% of par)"))
+    unrealised = get_column_letter(_column(sheet, "Unrealised"))
+
+    rows = {
+        (sheet.cell(r, borrower).value, sheet.cell(r, instrument).value): r
+        for r in range(2, sheet.max_row + 1)
+    }
+
+    acme = rows[("ACME Holdings Inc.", "FIRST_LIEN")]
+    assert float(values[f"MARKS!{mark}{acme}"]) == pytest.approx(70.0)
+
+    # Equity has no par, so it must mark against cost: 100k on 500k.
+    equity = rows[("Beta Industries", "COMMON_EQUITY")]
+    assert float(values[f"MARKS!{mark}{equity}"]) == pytest.approx(20.0)
+
+    beta = rows[("Beta Industries", "SECOND_LIEN")]
+    assert float(values[f"MARKS!{unrealised}{beta}"]) == pytest.approx(-3_000_000)
+
+
+@pytest.mark.slow
+def test_summary_totals_match_the_same_query_run_against_sqlite(conn, tmp_path):
+    target = tmp_path / "summary.xlsx"
+    excel.export_workbook(conn, target)
+    values = _evaluate(target)
+
+    sheet = load_workbook(target)["BDC summary"]
+    expected = {row["ticker"]: row for row in analytics.bdc_summary(conn, "2025-12-31")}
+    rows = {
+        sheet.cell(r, 1).value: r
+        for r in range(2, sheet.max_row + 1)
+        if sheet.cell(r, 1).value in expected
+    }
+    assert set(rows) == set(expected)
+
+    for ticker, row in rows.items():
+        want = expected[ticker]
+        assert float(values[f"BDC SUMMARY!G{row}"]) == pytest.approx(want["portfolio_mark"])
+        assert float(values[f"BDC SUMMARY!F{row}"]) == pytest.approx(want["fair_value"])
+        assert float(values[f"BDC SUMMARY!C{row}"]) == want["positions"]
+
+        # Blank, not 0%, where the filing disclosed no non-accrual status.
+        cell = values[f"BDC SUMMARY!K{row}"]
+        if want["nonaccrual_pct_fv"] is None:
+            assert cell == "", f"{ticker} reported {cell!r} for undisclosed non-accrual"
+        else:
+            assert float(cell) * 100 == pytest.approx(want["nonaccrual_pct_fv"])
+        assert float(values[f"BDC SUMMARY!L{row}"]) == want["nonaccrual_coverage"]
+
+
+@pytest.mark.slow
+def test_summary_ranges_cover_only_their_own_quarter(conn, tmp_path):
+    """A prior quarter's rows must not leak into this quarter's totals."""
+    earlier = normalize.finalize(
+        Position(
+            cik=ARCC.cik, period_end=date(2025, 9, 30), source="dera",
+            identifier="Acme Holdings, LLC, First Lien Term Loan",
+            fair_value=Decimal("9900000"), principal=Decimal("10000000"),
+            cost=Decimal("10000000"), accession="0001-25-000000", form="10-Q",
+        )
+    )
+    db.load_positions(conn, [earlier])
+    conn.commit()
+
+    target = tmp_path / "twoquarters.xlsx"
+    excel.export_workbook(conn, target)
+    values = _evaluate(target)
+
+    sheet = load_workbook(target)["BDC summary"]
+    rows = {sheet.cell(r, 1).value: r for r in range(2, sheet.max_row + 1)}
+    # Still the Q4 figure, not Q4 plus the Q3 row.
+    assert float(values[f"BDC SUMMARY!F{rows['ARCC']}"]) == pytest.approx(11_100_000)

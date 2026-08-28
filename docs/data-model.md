@@ -73,3 +73,36 @@ across runs and machines without a lookup table.
 overwrites rather than duplicates. Non-accrual is the one column that never
 regresses to NULL on update: a later source that does not know the status will
 not erase a status an earlier one established.
+
+
+## Exports
+
+`bdc excel` writes the dataset as a workbook:
+
+| Sheet | Contents |
+|---|---|
+| Read me | Provenance, coverage, what a mark is, the flag legend, how to verify a row |
+| Marks | The fact table — one row per (loan, quarter), 36 columns |
+| BDC summary | Per-BDC totals for one quarter, computed with live `SUMIFS` |
+| Disagreements | Credits held by two or more BDCs, ranked by mark spread |
+
+Three conventions differ from the database, because a spreadsheet is read by
+people rather than queried:
+
+- **Rates are fractions.** A coupon of 11.25% is stored as `0.1125` and
+  formatted as a percentage, which is what Excel expects.
+- **`Mark basis` is explicit.** It holds the denominator each row used — par for
+  debt, cost for equity — so the mark formula is a plain division anyone can
+  check, and editing a fair value moves it.
+- **Non-accrual reads "Not disclosed".** A blank cell would be read as "no". On
+  the summary sheet, a BDC whose filing disclosed nothing gets a blank
+  non-accrual percentage rather than 0%, and `Status disclosed` counts the rows
+  whose status is actually known.
+
+Derived columns are formulas, not Python-computed constants, so correcting a
+fair value updates its mark and every total above it. Summary ranges cover only
+the summarised quarter's rows, which keeps recalculation fast on a
+sixty-thousand-row sheet.
+
+`bdc bundle` writes the whole site as one HTML file with styles, scripts and
+every view's JSON inlined — no server, no network.
