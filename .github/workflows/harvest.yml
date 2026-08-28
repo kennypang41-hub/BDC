@@ -1,0 +1,125 @@
+name: Harvest BDC marks
+
+# The extraction needs to reach sec.gov. Any network that blocks it — a
+# corporate proxy, a sandboxed agent — cannot run the pipeline, so run it here:
+# GitHub's runners have open egress, and the outputs come back as artifacts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First quarter of SEC bulk data, e.g. 2023Q4"
+        required: true
+        default: "2023Q4"
+      end:
+        description: "Last quarter. Blank means the newest published."
+        required: false
+        default: ""
+      tickers:
+        description: "Comma-separated subset, e.g. ARCC,TSLX. Blank means all 43."
+        required: false
+        default: ""
+      identity:
+        description: "Contact for the SEC User-Agent (Name email). Falls back to the EDGAR_IDENTITY secret."
+        required: false
+        default: ""
+  schedule:
+    # BDCs file 10-Qs through the quarter's second month; pick up new marks then.
+    - cron: "0 6 5 3,6,9,12 *"
+
+permissions:
+  contents: read
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[web,dev]"
+
+      - name: Resolve SEC identity
+        id: identity
+        env:
+          INPUT_IDENTITY: ${{ inputs.identity }}
+          SECRET_IDENTITY: ${{ secrets.EDGAR_IDENTITY }}
+        run: |
+          IDENTITY="${INPUT_IDENTITY:-$SECRET_IDENTITY}"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::The SEC rejects unidentified requests. Set the EDGAR_IDENTITY secret" \
+                 "(Settings > Secrets > Actions) or pass the identity input, as 'Name email@example.com'."
+            exit 1
+          fi
+          echo "::add-mask::$IDENTITY"
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      # The SEC bulk data sets are ~50 MB a quarter and rarely change once
+      # published, so reuse them across runs rather than re-downloading.
+      - name: Restore SEC data set cache
+        uses: actions/cache@v4
+        with:
+          path: data/cache/dera
+          key: dera-${{ inputs.start }}-${{ inputs.end }}-${{ github.run_id }}
+          restore-keys: |
+            dera-${{ inputs.start }}-${{ inputs.end }}-
+            dera-
+
+      - name: Check EDGAR is reachable
+        env:
+          EDGAR_IDENTITY: ${{ steps.identity.outputs.identity }}
+        run: bdc doctor
+
+      # Inputs arrive as environment variables rather than being interpolated
+      # into the script: a `${{ }}` expansion lands in the shell verbatim, so a
+      # crafted input would run as a command.
+      - name: Harvest
+        env:
+          EDGAR_IDENTITY: ${{ steps.identity.outputs.identity }}
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+          TICKERS: ${{ inputs.tickers }}
+        run: |
+          args=(--start "$START" -v)
+          if [ -n "$END" ]; then
+            args+=(--end "$END")
+          fi
+          if [ -n "$TICKERS" ]; then
+            args+=(--tickers "$TICKERS")
+          fi
+          bdc harvest "${args[@]}"
+
+      - name: Summarise what landed
+        run: |
+          bdc stats
+          {
+            echo '## Marks extracted'
+            echo '```'
+            bdc stats
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the exports
+        run: |
+          bdc excel --out data/bdc-marks.xlsx
+          bdc bundle --out data/bdc-tracker.html
+          bdc export --out data/export
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdc-marks
+          path: |
+            data/bdc-marks.xlsx
+            data/bdc-tracker.html
+            data/bdc.db
+            data/export
+          retention-days: 30
+          if-no-files-found: error

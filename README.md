@@ -175,6 +175,19 @@ web/                 front end: no build step, no CDN, light and dark
 
 `marks` is the grain everything reads: **one row per (loan, quarter)**.
 
+## Running it where the SEC is reachable
+
+The extraction needs `sec.gov`. If your network blocks it — a corporate proxy, a
+sandboxed environment — `bdc doctor` will say so in two seconds rather than
+letting a harvest grind through retries.
+
+The repository carries a workflow that runs the harvest on GitHub's runners,
+which have open egress: **Actions → Harvest BDC marks → Run workflow**. Set an
+`EDGAR_IDENTITY` repository secret (`Name email@example.com`) or pass the
+identity input, choose a starting quarter, and the run uploads `bdc-marks.xlsx`,
+`bdc-tracker.html`, the SQLite database and the JSON export as artifacts. The
+quarterly SEC data sets are cached between runs.
+
 ## Status
 
 The extraction, normalisation, storage, analytics and web layers are complete
