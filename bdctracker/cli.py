@@ -139,6 +139,59 @@ def backfill(
 
 
 @app.command()
+def inspect(
+    ticker: str = typer.Option(..., help="BDC to pull, e.g. MAIN."),
+    issuer: str = typer.Option(None, help="Only show borrowers whose name contains this."),
+    limit: int = typer.Option(1, help="How many recent filings to read."),
+    period: str = typer.Option(None, help="Only show this balance-sheet date."),
+) -> None:
+    """Print raw positions straight from a filing, before any merging.
+
+    The merge step sums positions that share a loan key, so when a total looks
+    wrong the question is always which raw rows went into it. This shows them
+    with their full XBRL identifiers and the key each one derived.
+    """
+    from bdctracker.sources import xbrl as xbrl_source
+    from bdctracker.universe import resolve
+
+    bdc = resolve(ticker)
+    try:
+        raw = xbrl_source.harvest_company(bdc.cik, limit=limit)
+    except SecUnreachable as exc:
+        console.print(f"[red]Cannot reach the SEC.[/red] {exc}")
+        raise typer.Exit(3) from None
+
+    rows = raw
+    if issuer:
+        needle = issuer.upper()
+        rows = [p for p in rows if needle in (p.issuer_name or "").upper()
+                or needle in (p.identifier or "").upper()]
+    if period:
+        rows = [p for p in rows if p.period_end.isoformat() == period]
+
+    console.print(f"[bold]{bdc.ticker}[/bold] — {len(rows)} raw positions "
+                  f"of {len(raw)} in the last {limit} filing(s)")
+
+    groups: dict[str, list] = {}
+    for position in rows:
+        groups.setdefault(position.loan_id, []).append(position)
+
+    for loan_id, members in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        head = members[0]
+        console.print(
+            f"\n[cyan]loan {loan_id}[/cyan]  {head.investment_type}"
+            f"  facility={head.facility}  ({len(members)} raw row(s))"
+        )
+        for m in sorted(members, key=lambda p: (p.period_end, p.identifier or "")):
+            console.print(
+                f"    {m.period_end}  par={_fmt(float(m.principal) if m.principal else None)}"
+                f"  cost={_fmt(float(m.cost) if m.cost else None)}"
+                f"  fv={_fmt(float(m.fair_value) if m.fair_value else None)}"
+            )
+            console.print(f"      id: {m.identifier!r}")
+
+
+@app.command()
 def stats(db_path: Path = typer.Option(None)) -> None:
     """Show what is in the database."""
     with db.session(db_path) as conn:

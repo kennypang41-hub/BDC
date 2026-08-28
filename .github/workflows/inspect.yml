@@ -1,0 +1,73 @@
+name: Inspect raw positions
+
+# Prints raw positions from a filing, before merging, so a wrong total can be
+# traced to the rows that produced it. Runs here because it needs sec.gov.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticker:
+        description: "BDC ticker, e.g. MAIN"
+        required: true
+        default: "MAIN"
+      issuer:
+        description: "Borrower name fragment, e.g. RA Outdoors"
+        required: false
+        default: ""
+      limit:
+        description: "How many recent filings to read"
+        required: false
+        default: "1"
+      identity:
+        description: "Contact for the SEC User-Agent. Falls back to the EDGAR_IDENTITY secret."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+
+      - name: Resolve SEC identity
+        id: identity
+        env:
+          INPUT_IDENTITY: ${{ inputs.identity }}
+          SECRET_IDENTITY: ${{ secrets.EDGAR_IDENTITY }}
+        run: |
+          IDENTITY="${INPUT_IDENTITY:-$SECRET_IDENTITY}"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::Set the EDGAR_IDENTITY secret or pass the identity input."
+            exit 1
+          fi
+          echo "::add-mask::$IDENTITY"
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect
+        env:
+          EDGAR_IDENTITY: ${{ steps.identity.outputs.identity }}
+          TICKER: ${{ inputs.ticker }}
+          ISSUER: ${{ inputs.issuer }}
+          LIMIT: ${{ inputs.limit }}
+          COLUMNS: "200"
+        run: |
+          args=(--ticker "$TICKER" --limit "$LIMIT")
+          if [ -n "$ISSUER" ]; then
+            args+=(--issuer "$ISSUER")
+          fi
+          bdc inspect "${args[@]}" | tee inspect.txt
+          {
+            echo '## Raw positions'
+            echo '```'
+            cat inspect.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
