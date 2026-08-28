@@ -92,15 +92,20 @@ def positions_from_xbrl(
     form: str | None = None,
     filed_date: date | None = None,
     periods: Iterable[str] | None = None,
-    nonaccrual_identifiers: set[str] | None = None,
+    nonaccrual_by_period: dict[str, set[str]] | None = None,
+    all_facts: list[dict] | None = None,
 ) -> list[Position]:
     """Extract every tagged position, for every balance-sheet date in the filing.
 
     Taking all instant periods (not just the latest) is deliberate: a 10-K
     carries the prior year-end schedule too, so one download yields two
     quarters of marks.
+
+    ``all_facts`` lets a caller that has already built the fact list pass it in.
+    Rebuilding it is the single most expensive step in the whole harvest, so it
+    should happen once per filing, never once per consumer.
     """
-    facts = xbrl.facts.get_facts()
+    facts = all_facts if all_facts is not None else xbrl.facts.get_facts()
     wanted = set(periods) if periods else None
 
     grouped: dict[tuple[str, str], dict] = defaultdict(dict)
@@ -123,7 +128,7 @@ def positions_from_xbrl(
             bucket[field] = value
         bucket.setdefault("_dims", {}).update(_describe_dimensions(fact))
 
-    non_accrual = nonaccrual_identifiers or set()
+    non_accrual = nonaccrual_by_period or {}
     positions: list[Position] = []
     for (identifier, period), bucket in grouped.items():
         period_end = normalize.to_date(period)
@@ -162,7 +167,7 @@ def positions_from_xbrl(
             maturity_date=normalize.to_date(bucket.get("maturity_date")),
             acquisition_date=normalize.to_date(bucket.get("acquisition_date")),
             fair_value_level=dims.get("fair_value_level"),
-            is_non_accrual=True if identifier in non_accrual else None,
+            is_non_accrual=True if identifier in non_accrual.get(period, set()) else None,
             accession=accession,
             form=form,
             filed_date=filed_date,
@@ -172,18 +177,24 @@ def positions_from_xbrl(
     return positions
 
 
-def nonaccrual_identifiers(filing, period: str | None = None) -> set[str]:
-    """Identifiers the filing footnotes mark as non-accrual.
+def nonaccrual_identifiers(xbrl, period: str | None = None,
+                           all_facts: list[dict] | None = None) -> set[str]:
+    """Identifiers the filing footnotes mark as non-accrual, for one period.
 
     Non-accrual status lives in footnotes rather than a tagged flag, so this is
     best-effort; a miss leaves the flag unset rather than asserting "accruing".
+
+    Takes a parsed XBRL object rather than a filing on purpose. The public
+    ``extract_nonaccrual`` re-downloads and re-parses the filing and rebuilds
+    the fact list, which triples the cost of the most expensive step in the
+    harvest — measured at roughly a minute a filing across forty-three BDCs.
     """
     try:
-        from edgar.bdc import extract_nonaccrual
+        from edgar.bdc.nonaccrual import _extract_nonaccrual_from_xbrl
 
-        result = extract_nonaccrual(filing, period=period)
+        result = _extract_nonaccrual_from_xbrl(xbrl, period=period, all_facts=all_facts)
     except Exception as exc:
-        log.debug("non-accrual extraction failed for %s: %s", filing, exc)
+        log.debug("non-accrual extraction failed: %s", exc)
         return set()
     if result is None:
         return set()
@@ -225,8 +236,22 @@ def harvest_company(
         if xbrl is None:
             continue
 
-        na_ids = nonaccrual_identifiers(filing) if with_nonaccrual else set()
         try:
+            # Built once and shared: the fact list is the expensive artefact,
+            # not the download.
+            facts = xbrl.facts.get_facts()
+            by_period: dict[str, set[str]] = {}
+            if with_nonaccrual:
+                instants = {
+                    f.get("period_instant") for f in facts
+                    if f.get("concept") == "us-gaap:InvestmentOwnedAtFairValue"
+                    and f.get("period_instant")
+                }
+                for instant in instants:
+                    found = nonaccrual_identifiers(xbrl, period=instant, all_facts=facts)
+                    if found:
+                        by_period[instant] = found
+
             collected.extend(
                 positions_from_xbrl(
                     xbrl,
@@ -234,7 +259,8 @@ def harvest_company(
                     accession=getattr(filing, "accession_no", None),
                     form=getattr(filing, "form", None),
                     filed_date=filed,
-                    nonaccrual_identifiers=na_ids,
+                    nonaccrual_by_period=by_period,
+                    all_facts=facts,
                 )
             )
         except Exception as exc:

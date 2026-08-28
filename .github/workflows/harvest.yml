@@ -77,17 +77,22 @@ jobs:
           EDGAR_IDENTITY: ${{ steps.identity.outputs.identity }}
         run: bdc doctor
 
+      # The bulk data sets first, on their own. They carry the history in a
+      # handful of requests, so this finishes in minutes and guarantees there is
+      # a dataset to upload even if the slower filing pass runs long.
+      #
       # Inputs arrive as environment variables rather than being interpolated
       # into the script: a `${{ }}` expansion lands in the shell verbatim, so a
       # crafted input would run as a command.
-      - name: Harvest
+      - name: Harvest the SEC bulk data sets
+        timeout-minutes: 45
         env:
           EDGAR_IDENTITY: ${{ steps.identity.outputs.identity }}
           START: ${{ inputs.start }}
           END: ${{ inputs.end }}
           TICKERS: ${{ inputs.tickers }}
         run: |
-          args=(--start "$START" -v)
+          args=(--start "$START" --no-filings -v)
           if [ -n "$END" ]; then
             args+=(--end "$END")
           fi
@@ -96,7 +101,52 @@ jobs:
           fi
           bdc harvest "${args[@]}"
 
+      - name: Build the exports
+        run: |
+          bdc stats
+          bdc excel --out data/bdc-marks.xlsx
+          bdc bundle --out data/bdc-tracker.html
+          bdc export --out data/export
+
+      # Uploaded before the filing pass, so a slow top-up cannot cost us the
+      # dataset we already have.
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdc-marks
+          path: |
+            data/bdc-marks.xlsx
+            data/bdc-tracker.html
+            data/bdc.db
+            data/export
+          retention-days: 30
+          if-no-files-found: error
+
+      # DERA lags filings by about a quarter, so the newest marks only exist in
+      # the filings themselves. Bounded: this is a top-up, not a second harvest.
+      - name: Top up the newest quarter from filings
+        id: topup
+        continue-on-error: true
+        timeout-minutes: 75
+        env:
+          EDGAR_IDENTITY: ${{ steps.identity.outputs.identity }}
+          TICKERS: ${{ inputs.tickers }}
+        run: |
+          args=(--no-dera --limit-per-bdc 2 --workers 6 -v)
+          if [ -n "$TICKERS" ]; then
+            args+=(--tickers "$TICKERS")
+          fi
+          bdc harvest --start "${{ inputs.start }}" "${args[@]}"
+
+      - name: Rebuild the exports with the newest quarter
+        if: steps.topup.outcome == 'success'
+        run: |
+          bdc excel --out data/bdc-marks.xlsx
+          bdc bundle --out data/bdc-tracker.html
+          bdc export --out data/export
+
       - name: Summarise what landed
+        if: always()
         run: |
           bdc stats
           {
@@ -104,18 +154,14 @@ jobs:
             echo '```'
             bdc stats
             echo '```'
+            echo "Filing top-up: ${{ steps.topup.outcome }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build the exports
-        run: |
-          bdc excel --out data/bdc-marks.xlsx
-          bdc bundle --out data/bdc-tracker.html
-          bdc export --out data/export
-
-      - name: Upload
+      - name: Upload the final dataset
+        if: steps.topup.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: bdc-marks
+          name: bdc-marks-with-latest-quarter
           path: |
             data/bdc-marks.xlsx
             data/bdc-tracker.html

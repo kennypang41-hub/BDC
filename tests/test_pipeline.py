@@ -74,3 +74,34 @@ def test_clean_scores_each_filing_separately():
     cleaned = pipeline.clean(good + bad)
     assert all(abs(p.mark - 98.0) < 0.01 for p in cleaned)
     assert not any("rescaled" in f for p in cleaned if p.identifier.startswith("Good") for f in p.flags)
+
+
+# ---------------------------------------------------------------------------
+# Which filings the fallback reaches for
+# ---------------------------------------------------------------------------
+
+from bdctracker.sources.dera import Quarter  # noqa: E402
+
+WINDOW = [Quarter(2024, 1), Quarter(2024, 2), Quarter(2024, 3)]
+
+
+def test_filings_cover_the_whole_window_when_the_bulk_sets_are_skipped():
+    """--no-dera once harvested nothing at all: filings were treated as a gap-filler."""
+    since = pipeline._fallback_since(WINDOW, [], [], dera_ran=False)
+    assert since == date(2024, 1, 1)
+
+
+def test_filings_start_at_the_oldest_quarter_the_bulk_sets_missed():
+    since = pipeline._fallback_since(WINDOW, [Quarter(2024, 2)], [], dera_ran=True)
+    assert since == date(2024, 4, 1)
+
+
+def test_filings_only_top_up_when_the_bulk_sets_covered_everything():
+    harvested = [make("Acme Corp, First Lien Term Loan")]
+    since = pipeline._fallback_since(WINDOW, [], harvested, dera_ran=True)
+    assert since == date(2025, 12, 31)
+
+
+def test_nothing_to_fetch_when_there_is_nothing_to_go_on():
+    assert pipeline._fallback_since([], [], [], dera_ran=True) is None
+    assert pipeline._fallback_since([], [], [], dera_ran=False) is None

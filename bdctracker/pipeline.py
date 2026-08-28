@@ -154,7 +154,7 @@ def run(
 
     if use_filings:
         # Only reach for filings to cover what the bulk sets did not.
-        since = _fallback_since(window, missing, raw)
+        since = _fallback_since(window, missing, raw, dera_ran=use_dera)
         if since is not None:
             raw.extend(
                 harvest_filings(
@@ -197,17 +197,25 @@ def _fallback_since(
     window: Sequence[dera.Quarter],
     missing: Sequence[dera.Quarter],
     harvested: Sequence[Position],
+    *,
+    dera_ran: bool = True,
 ) -> date | None:
     """Earliest filing date worth downloading to cover DERA's gaps.
 
     If DERA served the whole window there is nothing to fetch; otherwise start
     from the oldest missing quarter.
     """
+    if not dera_ran:
+        # Filings are the only source, so they have to cover the whole window.
+        return _quarter_start(window[0]) if window else None
     if not missing:
         # Still top up the current quarter, which DERA never has yet.
         latest = max((p.period_end for p in harvested), default=None)
         if latest is None:
             return None
         return latest
-    oldest = min(missing, key=lambda q: (q.year, q.quarter))
-    return date(oldest.year, 3 * (oldest.quarter - 1) + 1, 1)
+    return _quarter_start(min(missing, key=lambda q: (q.year, q.quarter)))
+
+
+def _quarter_start(quarter: dera.Quarter) -> date:
+    return date(quarter.year, 3 * (quarter.quarter - 1) + 1, 1)

@@ -171,6 +171,32 @@ def xbrl_doc():
     return _XBRL(facts)
 
 
+def test_xbrl_builds_the_fact_list_once_when_it_is_handed_one(xbrl_doc):
+    """Rebuilding facts per consumer tripled the cost of the slowest step."""
+    calls = {"n": 0}
+    original = xbrl_doc.facts.get_facts
+
+    def counting():
+        calls["n"] += 1
+        return original()
+
+    xbrl_doc.facts.get_facts = counting
+    facts = counting()
+    xbrl.positions_from_xbrl(xbrl_doc, cik=1287750, all_facts=facts)
+    assert calls["n"] == 1
+
+
+def test_nonaccrual_flags_apply_only_to_their_own_period(xbrl_doc):
+    positions = xbrl.positions_from_xbrl(
+        xbrl_doc, cik=1287750,
+        nonaccrual_by_period={"2025-06-30": {ACME}},
+    )
+    by_period = {p.period_end: p.is_non_accrual for p in positions}
+    assert by_period[date(2025, 6, 30)] is True
+    # The prior year-end was not flagged, and must not inherit the flag.
+    assert by_period[date(2024, 12, 31)] is None
+
+
 def test_xbrl_extracts_one_position_per_identifier_and_period(xbrl_doc):
     positions = xbrl.positions_from_xbrl(xbrl_doc, cik=1287750, accession="0001", form="10-K")
     assert len(positions) == 2
