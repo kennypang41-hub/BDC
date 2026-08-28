@@ -105,3 +105,46 @@ def test_filings_only_top_up_when_the_bulk_sets_covered_everything():
 def test_nothing_to_fetch_when_there_is_nothing_to_go_on():
     assert pipeline._fallback_since([], [], [], dera_ran=True) is None
     assert pipeline._fallback_since([], [], [], dera_ran=False) is None
+
+
+# ---------------------------------------------------------------------------
+# Period scoping
+# ---------------------------------------------------------------------------
+
+def _at(period: date, identifier="Acme Corp, First Lien Term Loan"):
+    return normalize.finalize(
+        Position(cik=1, period_end=period, identifier=identifier,
+                 fair_value=Decimal("100"), principal=Decimal("100"))
+    )
+
+
+def test_a_future_period_end_is_dropped():
+    """A mark cannot exist for a date that has not happened.
+
+    Left in, it becomes MAX(period_end) and the tracker's headline quarter lands
+    on a near-empty period — which is exactly what the first real harvest did.
+    """
+    future = date.today().replace(year=date.today().year + 1)
+    kept = normalize.within_window([_at(date(2025, 12, 31)), _at(future)])
+    assert [p.period_end for p in kept] == [date(2025, 12, 31)]
+
+
+def test_periods_outside_the_requested_window_are_dropped():
+    kept = normalize.within_window(
+        [_at(date(2012, 8, 31)), _at(date(2024, 6, 30)), _at(date(2025, 3, 31))],
+        start=date(2023, 10, 1),
+        end=date(2024, 12, 31),
+    )
+    assert [p.period_end for p in kept] == [date(2024, 6, 30)]
+
+
+def test_an_unbounded_window_keeps_everything_already_reported():
+    rows = [_at(date(2012, 8, 31)), _at(date(2025, 3, 31))]
+    assert len(normalize.within_window(rows)) == 2
+
+
+def test_quarter_bounds():
+    assert pipeline._quarter_start(Quarter(2024, 2)) == date(2024, 4, 1)
+    assert pipeline._quarter_end(Quarter(2024, 2)) == date(2024, 6, 30)
+    assert pipeline._quarter_end(Quarter(2024, 4)) == date(2024, 12, 31)
+    assert pipeline._quarter_end(Quarter(2024, 1)) == date(2024, 3, 31)

@@ -180,6 +180,32 @@ def finalize(position: Position) -> Position:
 PLAUSIBLE_MARK_RANGE = (1.0, 200.0)
 
 
+def within_window(
+    positions: Iterable[Position],
+    start: date | None = None,
+    end: date | None = None,
+) -> list[Position]:
+    """Keep only marks whose balance-sheet date is real and in scope.
+
+    Filings carry more period ends than the schedule being reported: prior-year
+    comparatives, restated columns, and forward-dated contexts. Left in, they
+    fragment the panel and — worse — a future-dated period becomes ``MAX(period_end)``,
+    so the tracker's "latest quarter" lands on a date with almost no positions
+    and every headline total collapses.
+    """
+    today = date.today()
+    kept: list[Position] = []
+    for position in positions:
+        if position.period_end > today:
+            continue
+        if start and position.period_end < start:
+            continue
+        if end and position.period_end > end:
+            continue
+        kept.append(position)
+    return kept
+
+
 def flag_quality(positions: Sequence[Position]) -> Sequence[Position]:
     """Annotate positions with data-quality flags.
 

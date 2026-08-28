@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -165,6 +165,9 @@ def run(
                 )
             )
 
+    # Scope to the requested window before anything downstream reads
+    # MAX(period_end) as "the latest quarter".
+    raw = normalize.within_window(raw, start=_quarter_start(start), end=_quarter_end(end))
     positions = clean(raw)
 
     with db.session(db_path) as conn:
@@ -219,3 +222,12 @@ def _fallback_since(
 
 def _quarter_start(quarter: dera.Quarter) -> date:
     return date(quarter.year, 3 * (quarter.quarter - 1) + 1, 1)
+
+
+def _quarter_end(quarter: dera.Quarter) -> date:
+    """Last day of the quarter. DERA publishes a quarter after its filings land,
+    so allow a quarter of slack for the period ends those filings report."""
+    year, month = quarter.year, 3 * quarter.quarter
+    if month == 12:
+        return date(year, 12, 31)
+    return date(year, month + 1, 1) - timedelta(days=1)
