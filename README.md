@@ -190,20 +190,41 @@ quarterly SEC data sets are cached between runs.
 
 ## Status
 
-The extraction, normalisation, storage, analytics and web layers are complete
-and covered by tests. The parser tests run against fixtures shaped like the real
-SEC artefacts (the DERA TSV layout and taxonomy label columns; the fact dicts
-edgartools yields, including the identifier axis).
+Run against live EDGAR on 2026-08-28 (`--start 2023Q4`, all 43 BDCs, 18 minutes
+on a GitHub runner):
 
-**The pipeline has not yet been run against live EDGAR.** It was built in an
-environment whose egress policy blocks `sec.gov`, so no filing was downloaded
-and no extracted figure in this repository comes from a filing. Everything
-shipped here is code plus a clearly-labelled synthetic dataset. The first real
-run — `bdc harvest --start 2023Q4` from a machine that can reach the SEC — is
-where the row counts, the DERA column names and the per-filer quirks get
-confirmed. Expect to tune `identity.py`'s type rules and `dera.py`'s
-`COLUMN_MAP` against what the real files contain.
+```
+bdcs_with_marks       43        marks             152,272
+issuers           26,717        periods                35
+loans             40,934        earliest_period   2023-10-31
+debt_loans        26,305        latest_period     2026-06-30
+total_fair_value  $202,414,257,256
+```
 
-## Licence
+The bulk data sets carried it in 6 minutes; the filing top-up added the newest
+quarter in 9 more.
+
+**Known gap: identity is under-collapsing.** 40,934 loans and 26,717 borrowers
+is roughly three times what a mature tracker of this universe reports (~11,400
+loans). Fair value and the marks themselves look right — $202bn is the correct
+order of magnitude for the sector — so this is a keying problem, not an
+extraction one: the same borrower spelled differently across filers, or the
+same facility described differently across quarters, is landing on more than
+one key.
+
+Where to look, in order:
+
+1. **Issuer names.** `Investment, Issuer Name Axis` is not tagged by every
+   filer, so `split_identifier` falls back to splitting the full investment
+   label on its first comma. A filer that writes "First Lien Term Loan — Acme
+   Corp" rather than "Acme Corp, First Lien Term Loan" gets the instrument as
+   its borrower. Sample `issuers.display_name` and see which shapes appear.
+2. **Tranche signatures.** Check whether one borrower at one BDC has several
+   loan ids that ought to be one.
+3. **Period ends.** 35 distinct dates over eleven quarters is plausible given
+   BDCs run different fiscal year ends (Golub in September, most in December),
+   but worth confirming none are artefacts.
+
+## Licence## Licence
 
 MIT.
