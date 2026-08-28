@@ -144,3 +144,75 @@ def test_quality_flags():
     assert "no_principal" in positions[1].flags
     assert "no_fair_value" in positions[2].flags
     assert "unclassified" in positions[2].flags
+
+
+# ---------------------------------------------------------------------------
+# Restatement rows
+# ---------------------------------------------------------------------------
+
+def _facility(identifier, par, cost, fv, accession="0001"):
+    """A row as Main Street tags it: some priced, some fair-value only."""
+    return normalize.finalize(
+        Position(
+            cik=1396440, period_end=date(2026, 6, 30), accession=accession,
+            identifier=identifier,
+            principal=None if par is None else Decimal(str(par)),
+            cost=None if cost is None else Decimal(str(cost)),
+            fair_value=None if fv is None else Decimal(str(fv)),
+        )
+    )
+
+
+def _ra_outdoors_as_filed():
+    """Main Street's RA Outdoors rows, 2026-06-30, verbatim from the filing.
+
+    Four real facilities, each priced; then the same four fair values repeated
+    under 1.1-1.4 with no par and no cost. Summing all eight doubles the mark.
+    """
+    return [
+        _facility("RA Outdoors LLC | Secured Debt 1",   1_510_000, 1_510_000,  1_258_000),
+        _facility("RA Outdoors LLC | Secured Debt 1.1",      None,      None,  1_258_000),
+        _facility("RA Outdoors LLC | Secured Debt 1.2",      None,      None, 13_160_000),
+        _facility("RA Outdoors LLC | Secured Debt 1.3",      None,      None,    399_000),
+        _facility("RA Outdoors LLC | Secured Debt 1.4",      None,      None,    389_000),
+        _facility("RA Outdoors LLC | Secured Debt 2",     478_000,   478_000,    399_000),
+        _facility("RA Outdoors LLC | Secured Debt 3",     467_000,   467_000,    389_000),
+        _facility("RA Outdoors LLC | Secured Debt 4",  15_794_000, 15_788_000, 13_160_000),
+    ]
+
+
+def test_ra_outdoors_totals_match_the_filing():
+    merged = normalize.merge_within_filing(_ra_outdoors_as_filed())
+    assert len(merged) == 1
+    position = merged[0]
+
+    assert position.principal == Decimal("18249000")
+    assert position.cost == Decimal("18243000")
+    # The reported figure. Summing the restatement rows gave 30,412,000.
+    assert position.fair_value == Decimal("15206000")
+    assert position.mark == pytest.approx(100 * 15_206 / 18_249)
+
+
+def test_restatement_rows_are_dropped_and_flagged():
+    kept = normalize.drop_restatements(_ra_outdoors_as_filed())
+    assert [p.identifier.rsplit(" ", 1)[-1] for p in kept] == ["1", "2", "3", "4"]
+
+
+def test_a_group_with_no_priced_row_is_left_intact():
+    """Nothing distinguishes a restatement when no sibling carries par or cost."""
+    rows = [
+        _facility("Acme | Secured Debt 1", None, None, 100),
+        _facility("Acme | Secured Debt 2", None, None, 200),
+    ]
+    assert len(normalize.drop_restatements(rows)) == 2
+
+
+def test_genuinely_distinct_facilities_still_sum():
+    rows = [
+        _facility("Acme | Secured Debt 1", 1_000, 1_000, 900),
+        _facility("Acme | Secured Debt 2", 2_000, 2_000, 1_800),
+    ]
+    merged = normalize.merge_within_filing(rows)
+    assert len(merged) == 1
+    assert merged[0].principal == Decimal("3000")
+    assert merged[0].fair_value == Decimal("2700")

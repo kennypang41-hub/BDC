@@ -278,8 +278,30 @@ def merge_within_filing(positions: Iterable[Position]) -> list[Position]:
         if len(members) == 1:
             merged.append(members[0])
             continue
-        merged.append(_sum_positions(members))
+        merged.append(_sum_positions(drop_restatements(members)))
     return merged
+
+
+def drop_restatements(members: Sequence[Position]) -> list[Position]:
+    """Remove rows that restate a sibling's fair value rather than adding to it.
+
+    Filers disclose the same position twice: once as the investment, with par,
+    cost and fair value, and again under a sub-identifier carrying *only* fair
+    value — the fair-value-hierarchy or valuation-technique breakdown of money
+    already counted. Main Street tags each facility a second time this way,
+    which doubled every one of its fair values when summed.
+
+    So within a group, a member priced with par or cost is a facility; a member
+    with fair value alone, alongside priced siblings, is a restatement of it.
+    Where *no* member is priced, nothing can be distinguished and all are kept.
+    """
+    priced = [m for m in members if m.principal is not None or m.cost is not None]
+    if not priced or len(priced) == len(members):
+        return list(members)
+
+    for dropped in (m for m in members if m not in priced):
+        dropped.flags.append("dropped_restatement")
+    return priced
 
 
 def _sum_positions(members: Sequence[Position]) -> Position:

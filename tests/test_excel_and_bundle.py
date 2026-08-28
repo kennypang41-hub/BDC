@@ -68,7 +68,7 @@ def test_mark_is_a_live_formula_not_a_baked_number(conn, tmp_path):
     sheet = load_workbook(target)["Marks"]
 
     headers = [cell.value for cell in sheet[1]]
-    mark_column = headers.index("Mark (% of par)") + 1
+    mark_column = headers.index("Mark (% of principal)") + 1
     formula = sheet.cell(row=2, column=mark_column).value
     assert isinstance(formula, str) and formula.startswith("=IFERROR(")
     assert "/" in formula and "*100" in formula
@@ -234,7 +234,7 @@ def test_row_formulas_compute_the_mark_the_database_computed(conn, tmp_path):
     sheet = load_workbook(target)["Marks"]
     borrower = _column(sheet, "Borrower")
     instrument = _column(sheet, "Instrument")
-    mark = get_column_letter(_column(sheet, "Mark (% of par)"))
+    mark = get_column_letter(_column(sheet, "Mark (% of principal)"))
     unrealised = get_column_letter(_column(sheet, "Unrealised"))
 
     rows = {

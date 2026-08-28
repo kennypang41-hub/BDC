@@ -43,11 +43,11 @@ MARK_COLUMNS: list[tuple[str, str | None, str | None, int]] = [
     ("Facility",              "facility",          None,          12),
     ("Industry",              "industry",          None,          26),
     ("Ccy",                   "currency",          None,          6),
-    ("Par",                   "principal",         MONEY,         16),
+    ("Principal",             "principal",         MONEY,         16),
     ("Cost",                  "cost",              MONEY,         16),
     ("Fair value",            "fair_value",        MONEY,         16),
     ("Mark basis",            "mark_basis",        MONEY,         16),
-    ("Mark (% of par)",       None,                PRICE,         14),
+    ("Mark (% of principal)", None,                PRICE,         14),
     ("Unrealised",            None,                MONEY_SIGNED,  16),
     ("Unrealised vs cost",    None,                PCT1,          16),
     ("Coupon",                "interest_rate",     PCT,           10),
@@ -129,7 +129,7 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> tuple[int, dic
     fair_value = _letter("Fair value")
     basis = _letter("Mark basis")
     cost = _letter("Cost")
-    mark = _letter("Mark (% of par)")
+    mark = _letter("Mark (% of principal)")
     unrealised = _letter("Unrealised")
 
     blocks: dict[str, list[int]] = {}
@@ -145,7 +145,7 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> tuple[int, dic
         values = []
         for header, source, number_format, _width in MARK_COLUMNS:
             if source is None:
-                if header == "Mark (% of par)":
+                if header == "Mark (% of principal)":
                     value = f"=IFERROR({fair_value}{row_number}/{basis}{row_number}*100,\"\")"
                 elif header == "Unrealised":
                     value = f"=IFERROR({fair_value}{row_number}-{cost}{row_number},\"\")"
@@ -173,7 +173,7 @@ SUMMARY_COLUMNS = [
     ("BDC", None, None, 8),
     ("Name", None, None, 32),
     ("Positions", None, INT, 12),
-    ("Par", None, MONEY, 16),
+    ("Principal", None, MONEY, 16),
     ("Cost", None, MONEY, 16),
     ("Fair value", None, MONEY, 16),
     ("Portfolio mark", None, PRICE, 14),
@@ -231,7 +231,7 @@ def _write_summary(workbook: Workbook, conn: sqlite3.Connection,
         sheet.cell(row=index, column=2, value=record["name"])
         sheet.cell(row=index, column=3,
                    value=f"=COUNTIFS({period_range},$N$1,{ticker_range},$A{index})")
-        sheet.cell(row=index, column=4, value=sumifs("Par", index, f",{debt_range},1"))
+        sheet.cell(row=index, column=4, value=sumifs("Principal", index, f",{debt_range},1"))
         sheet.cell(row=index, column=5, value=sumifs("Cost", index))
         sheet.cell(row=index, column=6, value=sumifs("Fair value", index))
         # Portfolio mark is debt fair value over debt par — equity has no par.
@@ -354,10 +354,14 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
     line += 1
 
     put("What a mark is",
-        "Fair value as a percentage of par. 100 means the BDC carries the loan at par; "
-        "below 100 means it has written the position down. Equity positions have no par, "
-        "so they are marked against cost — the 'Mark basis' column shows which denominator "
-        "each row used.")
+        "Fair value divided by principal, as reported in the filing, times 100. "
+        "100 means the BDC carries the loan at par; below 100 means it has written the "
+        "position down. Equity has no principal, so it is marked against cost instead — "
+        "the 'Mark basis' column always shows which denominator that row used.")
+    put("Principal",
+        "Principal outstanding as the filing reports it. Blank where the filer did not "
+        "tag it, in which case the mark falls back to cost and the row carries the "
+        "no_principal flag.")
     put("Grain", "One row per (loan, quarter) on the Marks sheet.")
     put("Rates", "Coupon, spread and PIK are true percentages (5.75% is stored as 0.0575).")
     put("Non-accrual",
@@ -373,7 +377,10 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
         "no_fair_value / no_principal = the filing omitted it · implausible_mark = outside "
         "1-200, usually a filer units error · unclassified = the instrument label matched "
         "no rule · merged_N_facilities = N same-kind facilities to one borrower summed "
-        "within a filing · rescaled_xN = the filing's units were off by N and corrected.")
+        "within a filing · dropped_restatement = a sibling row repeated this fair value "
+        "with no principal or cost (a fair-value-hierarchy breakdown of money already "
+        "counted) and was excluded · rescaled_xN = the filing's units were off by N and "
+        "corrected.")
     line += 1
     put("Verify a row",
         "The Accession column is the SEC accession number. Look it up at "
