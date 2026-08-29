@@ -1,0 +1,655 @@
+<title>Hyperscaler Footnote Commitments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --page:        #f4f4f1;
+  --surface:     #fcfcfb;
+  --surface-2:   #eeeeea;
+  --ink:         #14181e;
+  --ink-2:       #4d555f;
+  --ink-3:       #868d96;
+  --rule:        #dcdcd5;
+  --hairline:    #e6e6e0;
+  --accent:      #1f3a5f;
+  --caution:     #9c2b2b;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+  --shadow: 0 1px 2px rgba(20,24,30,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page:      #0d0f12;
+    --surface:   #1a1a19;
+    --surface-2: #232326;
+    --ink:       #f3f5f7;
+    --ink-2:     #b9c0c8;
+    --ink-3:     #8b929a;
+    --rule:      #33343a;
+    --hairline:  #2a2b30;
+    --accent:    #9fc0e8;
+    --caution:   #e08a8a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --s4: #c98500; --s5: #d55181; --s6: #008300;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page:      #0d0f12;
+  --surface:   #1a1a19;
+  --surface-2: #232326;
+  --ink:       #f3f5f7;
+  --ink-2:     #b9c0c8;
+  --ink-3:     #8b929a;
+  --rule:      #33343a;
+  --hairline:  #2a2b30;
+  --accent:    #9fc0e8;
+  --caution:   #e08a8a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  --s4: #c98500; --s5: #d55181; --s6: #008300;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 0 20px 72px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+h1, h2, h3 { font-family: Spectral, Georgia, "Times New Roman", serif; font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.1; letter-spacing: -.015em; }
+h2 { font-size: 23px; line-height: 1.25; }
+h3 { font-size: 17px; }
+p { margin: 0; }
+a { color: var(--accent); }
+
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px; font-weight: 500;
+  letter-spacing: .13em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+header.masthead { padding: 56px 0 28px; border-bottom: 2px solid var(--ink); }
+.standfirst { font-size: 18px; color: var(--ink-2); max-width: 68ch; margin-top: 16px; line-height: 1.5; }
+.byline {
+  display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 22px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px; color: var(--ink-3);
+}
+
+section { padding-top: 44px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+.sec-note { color: var(--ink-2); font-size: 14.5px; max-width: 74ch; margin-top: 10px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin-top: 28px; }
+.tile { background: var(--surface); padding: 18px 20px 20px; }
+.tile .k { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 27px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; display: block; margin: 8px 0 6px; }
+.tile .lab { font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
+
+.card { background: var(--surface); border: 1px solid var(--rule); box-shadow: var(--shadow); margin-top: 22px; padding: 22px 22px 18px; }
+.card > figcaption { margin-bottom: 4px; }
+.chartbox { position: relative; margin-top: 14px; }
+.chartbox svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 14px; }
+.legend .item { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+.legend .sw { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+
+.tooltip {
+  position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--rule); box-shadow: 0 4px 14px rgba(0,0,0,.14);
+  padding: 9px 11px; font-size: 12.5px; min-width: 150px; z-index: 5;
+}
+.tooltip .tt-q { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.tooltip .tt-v { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 16px; margin: 3px 0 2px; }
+.tooltip .tt-n { color: var(--ink-2); line-height: 1.35; }
+
+details { margin-top: 14px; border-top: 1px solid var(--hairline); padding-top: 10px; }
+summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
+summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.tablewrap { overflow-x: auto; margin-top: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+th:first-child, td:first-child, .tl { text-align: left; }
+thead th { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--rule); font-weight: 500; }
+td.num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: var(--surface-2); }
+td.empty { color: var(--ink-3); }
+tfoot td { font-weight: 600; border-top: 1px solid var(--rule); border-bottom: none; }
+
+.chip { display: inline-block; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10.5px; letter-spacing: .04em; padding: 2px 7px; border: 1px solid var(--rule); color: var(--ink-2); }
+.chip.weak { border-color: var(--caution); color: var(--caution); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 18px; }
+.controls button {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px;
+  background: var(--surface); color: var(--ink-2);
+  border: 1px solid var(--rule); padding: 6px 13px; cursor: pointer;
+}
+.controls button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 22px; margin-top: 22px; }
+.cols2 .card { margin-top: 0; }
+
+.smgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 4px 20px; margin-top: 4px; }
+.sm { padding-top: 10px; }
+.sm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--hairline); padding-bottom: 6px; }
+.sm-head .t { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; font-weight: 600; letter-spacing: .04em; }
+.sm-head .n { font-size: 11.5px; color: var(--ink-3); }
+
+.recon { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; align-items: start; }
+.note-list { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.note-list li { padding-left: 15px; border-left: 2px solid var(--rule); color: var(--ink-2); font-size: 14px; }
+.note-list li b { color: var(--ink); font-weight: 600; }
+
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--rule); color: var(--ink-3); font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Off-balance-sheet disclosure &middot; twelve quarters</p>
+  <h1>The commitments that never reach the balance sheet</h1>
+  <p class="standfirst">
+    Six hyperscalers have signed leases and purchase agreements that bind future cash but sit
+    in the footnotes rather than on the balance sheet. This tracks both lines &mdash; leases signed
+    but not yet commenced, and non-cancelable purchase commitments &mdash; quarter by quarter,
+    as each company discloses them.
+  </p>
+  <div class="byline">
+    <span>Alphabet &middot; Microsoft &middot; Meta &middot; Amazon &middot; NVIDIA &middot; Oracle</span>
+    <span id="by-range"></span>
+    <span>USD billions</span>
+    <span id="by-count"></span>
+  </div>
+</header>
+
+<section id="headline">
+  <div class="tiles" id="tiles"></div>
+  <p class="sec-note">
+    Under ASC 842 a signed lease becomes a liability only when the lessor hands over the asset. Until then
+    the whole obligation lives in a footnote &mdash; which is why these totals can grow by a hundred billion
+    dollars in a quarter without moving a reported liability.
+  </p>
+</section>
+
+<section id="stacks">
+  <div class="sec-head">
+    <h2>Where the commitments sit, quarter by quarter</h2>
+  </div>
+  <p class="sec-note">
+    Stacked by company. The strip under each bar shows which of the six actually disclosed that quarter:
+    a filled square means the company is in the bar, a hollow one means it is missing. Bars with hollow
+    squares are <em>not</em> comparable with full ones &mdash; the total is smaller because fewer companies
+    reported, not because less was committed.
+  </p>
+  <div class="controls" role="group" aria-label="Choose measure">
+    <button type="button" data-metric="purchase_commitments" aria-pressed="true">Purchase commitments</button>
+    <button type="button" data-metric="uncommenced_leases" aria-pressed="false">Uncommenced leases</button>
+  </div>
+  <figure class="card">
+    <figcaption><h3 id="stack-title"></h3><p class="sec-note" id="stack-sub"></p></figcaption>
+    <div class="chartbox" id="chart-stack"></div>
+    <div class="legend" id="legend-stack"></div>
+    <details>
+      <summary>Table view</summary>
+      <div class="tablewrap" id="table-stack"></div>
+    </details>
+  </figure>
+</section>
+
+<section id="trajectories">
+  <div class="sec-head"><h2>Each company's own trajectory</h2></div>
+  <p class="sec-note">
+    One panel per company, both measures, all six drawn on the same vertical scale so the panels can be read
+    against each other. A gap in a line is a quarter the company did not disclose, not a fall to zero.
+    The shared scale is the point: Oracle's lease line and Alphabet's commitment line are doing something
+    the others are not.
+  </p>
+  <div class="legend" id="legend-sm"></div>
+  <div class="card" style="padding-bottom:22px">
+    <div class="smgrid" id="small-multiples"></div>
+  </div>
+</section>
+
+<section id="reconciliation">
+  <div class="sec-head"><h2>Checking the total against Morgan Stanley</h2></div>
+  <div class="recon">
+    <div>
+      <p class="sec-note" id="recon-text"></p>
+      <ul class="note-list">
+        <li><b>Four of six agree independently.</b> Alphabet, Meta, Amazon and Oracle each land within a billion of the published chart, having been sourced from the filings rather than from it. Microsoft matches trivially &mdash; its figure for this quarter <em>is</em> the chart's, so it corroborates nothing.</li>
+        <li><b>The gap is entirely NVIDIA.</b> This dataset carries the $119bn disclosed for the quarter ended 26 April 2026; the chart used $155bn, most likely NVIDIA's January fiscal year-end on a broader definition that folds in other purchase obligations and cloud service agreements.</li>
+        <li><b>Definitions are not uniform.</b> Alphabet reports &ldquo;purchase commitments and other contractual obligations&rdquo;, Amazon &ldquo;unconditional purchase obligations&rdquo;, Meta &ldquo;non-cancelable contractual commitments&rdquo;. Cross-company totals are indicative, not like-for-like.</li>
+      </ul>
+    </div>
+    <figure class="card" style="margin-top:0">
+      <figcaption><h3>Purchase commitments at 31 March 2026</h3></figcaption>
+      <div class="tablewrap" id="table-recon"></div>
+    </figure>
+  </div>
+</section>
+
+<section id="data">
+  <div class="sec-head"><h2>Every figure, with its provenance</h2></div>
+  <p class="sec-note">
+    Each observation carries how it was sourced. <span class="chip">filing</span> and
+    <span class="chip">filing_table</span> come from the filing's own footnote or maturity table;
+    <span class="chip weak">press</span> and <span class="chip weak">derived</span> are weaker and
+    are flagged wherever they appear.
+  </p>
+  <div class="controls" role="group" aria-label="Filter rows">
+    <button type="button" data-filter="all" aria-pressed="true">All</button>
+    <button type="button" data-filter="uncommenced_leases" aria-pressed="false">Leases only</button>
+    <button type="button" data-filter="purchase_commitments" aria-pressed="false">Commitments only</button>
+    <button type="button" data-filter="weak" aria-pressed="false">Weakly sourced only</button>
+  </div>
+  <div class="card">
+    <div class="tablewrap" id="table-all"></div>
+  </div>
+</section>
+
+<section id="method">
+  <div class="sec-head"><h2>Method, and what this cannot tell you</h2></div>
+  <ul class="note-list">
+    <li><b>Coverage is 59 of a possible 144 cells.</b> 2023 and much of 2024 are thin by nature: several of these companies only began disclosing a material uncommenced-lease balance during 2025, and NVIDIA does not disclose one at all &mdash; its exposure sits in supply and capacity purchase obligations instead. An empty cell means no disclosure was sourced. It is never a zero and never an estimate.</li>
+    <li><b>Fiscal calendars differ.</b> Quarters are calendar-aligned for comparability. Microsoft's year ends in June, NVIDIA's in late January, Oracle's in May, so their figures sit at the nearest calendar quarter &mdash; the exact balance-sheet date is on every row of the table and in the workbook.</li>
+    <li><b>The two measures overlap in spirit, not in accounting.</b> Adding a company's leases to its purchase commitments gives a sense of total forward obligation, but the two are disclosed under different standards and neither is a debt figure.</li>
+    <li><b>Sourcing constraint.</b> SEC.gov and every filing mirror were unreachable from the environment this was built in, so figures were collected by searching filing text rather than parsing EDGAR directly. Where two sources disagreed, maturity tables that sum to their stated total were preferred, and the Morgan Stanley cross-check above was used as an independent test.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Compiled <span id="foot-date"></span> from SEC 10-Q and 10-K footnote disclosures. Figures in USD billions.
+  Accompanying workbook: <code>hyperscaler_commitments.xlsx</code>.</p>
+</footer>
+
+</div>
+
+<script type="application/json" id="payload">__DATA__</script>
+<script>
+(function () {
+  "use strict";
+  const D = JSON.parse(document.getElementById("payload").textContent);
+  const NS = "http://www.w3.org/2000/svg";
+  const TICKERS = D.companies.map(c => c.ticker);
+  const NAMES = Object.fromEntries(D.companies.map(c => [c.ticker, c.name]));
+  const COLOR = Object.fromEntries(D.companies.map((c, i) => [c.ticker, `var(--s${i + 1})`]));
+  const QUARTERS = D.quarters;
+  const METRIC_LABEL = {
+    uncommenced_leases: "Uncommenced lease commitments",
+    purchase_commitments: "Purchase commitments"
+  };
+  const STRONG = new Set(["filing", "filing_table"]);
+
+  const grid = {};
+  for (const o of D.observations) grid[`${o.ticker}|${o.quarter}|${o.metric}`] = o;
+  const get = (t, q, m) => grid[`${t}|${q}|${m}`];
+  const val = (t, q, m) => { const o = get(t, q, m); return o ? o.value : null; };
+
+  const bn = v => v == null ? "–" : `$${v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(1)}bn`;
+  const el = (tag, attrs) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+
+  function colTotal(q, m) {
+    const vs = TICKERS.map(t => val(t, q, m)).filter(v => v != null);
+    return { total: vs.reduce((a, b) => a + b, 0), n: vs.length };
+  }
+
+  /* ---------- headline tiles ---------- */
+  const lastLease = colTotal("2026Q2", "uncommenced_leases");
+  const q1Purch = colTotal("2026Q1", "purchase_commitments");
+  const tiles = [
+    { k: bn(lastLease.total), lab: `Uncommenced leases across the six at 2026 Q2, from ${lastLease.n} of 6 disclosing` },
+    { k: bn(q1Purch.total), lab: `Purchase commitments at 2026 Q1 &mdash; the one quarter where all six disclose` },
+    { k: bn(val("GOOGL", "2026Q2", "purchase_commitments")), lab: "Alphabet's purchase commitments at 2026 Q2, the largest single line in the set" },
+    { k: "+" + bn(val("MSFT", "2026Q2", "uncommenced_leases") - val("MSFT", "2026Q1", "uncommenced_leases")), lab: "Added to Microsoft's uncommenced leases in a single quarter" }
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(t =>
+    `<div class="tile"><span class="k">${t.k}</span><span class="lab">${t.lab}</span></div>`).join("");
+
+  document.getElementById("by-range").textContent = `${QUARTERS[0]} – ${QUARTERS[QUARTERS.length - 1]}`;
+  document.getElementById("by-count").textContent = `${D.observations.length} disclosed observations`;
+  document.getElementById("foot-date").textContent = D.meta.compiled;
+  document.getElementById("recon-text").textContent = D.series_notes.reconciliation_ms_1q26.split(" Five of six")[0];
+
+  /* ---------- tooltip helper ---------- */
+  function attachTip(box) {
+    const tip = document.createElement("div");
+    tip.className = "tooltip";
+    box.appendChild(tip);
+    return {
+      show(html, x, y) {
+        tip.innerHTML = html;
+        tip.style.opacity = "1";
+        const w = box.clientWidth;
+        const tw = tip.offsetWidth;
+        tip.style.left = Math.max(0, Math.min(x - tw / 2, w - tw)) + "px";
+        tip.style.top = Math.max(0, y - tip.offsetHeight - 12) + "px";
+      },
+      hide() { tip.style.opacity = "0"; }
+    };
+  }
+
+  function niceMax(v) {
+    if (v <= 0) return 10;
+    const mag = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const s of [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
+      if (v <= s * mag) return s * mag;
+    }
+    return 10 * mag;
+  }
+
+  /* ---------- stacked bars ---------- */
+  function drawStack(metric) {
+    const box = document.getElementById("chart-stack");
+    box.innerHTML = "";
+    const tip = attachTip(box);
+
+    const W = 1040, H = 442;
+    const M = { t: 30, r: 16, b: 74, l: 62 };
+    const iw = W - M.l - M.r, ih = H - M.t - M.b;
+    const max = niceMax(Math.max(...QUARTERS.map(q => colTotal(q, metric).total)));
+    const y = v => M.t + ih - (v / max) * ih;
+    const band = iw / QUARTERS.length;
+    const bw = Math.min(58, band * 0.62);
+
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+    svg.setAttribute("aria-label", `${METRIC_LABEL[metric]} by quarter, stacked by company`);
+
+    for (let i = 0; i <= 5; i++) {
+      const v = (max / 5) * i;
+      const yy = y(v);
+      svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: yy, y2: yy, stroke: "var(--hairline)", "stroke-width": 1 }));
+      const lab = el("text", { x: M.l - 10, y: yy + 4, "text-anchor": "end", fill: "var(--ink-3)", "font-size": 11.5 });
+      lab.setAttribute("font-family", "IBM Plex Mono, monospace");
+      lab.textContent = v === 0 ? "0" : `${Math.round(v)}`;
+      svg.appendChild(lab);
+    }
+    const axTitle = el("text", { x: M.l - 10, y: M.t - 14, "text-anchor": "end", fill: "var(--ink-3)", "font-size": 11 });
+    axTitle.setAttribute("font-family", "IBM Plex Mono, monospace");
+    axTitle.textContent = "$bn";
+    svg.appendChild(axTitle);
+
+    QUARTERS.forEach((q, qi) => {
+      const cx = M.l + band * qi + band / 2;
+      const x0 = cx - bw / 2;
+      let acc = 0;
+      const present = TICKERS.filter(t => val(t, q, metric) != null);
+
+      present.forEach((t, idx) => {
+        const v = val(t, q, metric);
+        const yTop = y(acc + v), yBot = y(acc);
+        const isTop = idx === present.length - 1;
+        const h = Math.max(1, yBot - yTop - (idx === 0 ? 0 : 2));
+        const rect = el("rect", {
+          x: x0, y: yTop, width: bw, height: h,
+          fill: COLOR[t], rx: isTop ? 4 : 0, ry: isTop ? 4 : 0
+        });
+        rect.style.cursor = "pointer";
+        const o = get(t, q, metric);
+        const flag = STRONG.has(o.provenance) ? "" : `<div class="tt-n" style="color:var(--caution)">${o.provenance} — weakly sourced</div>`;
+        rect.addEventListener("pointerenter", () => tip.show(
+          `<div class="tt-q">${q} · ${t}</div><div class="tt-v">${bn(v)}</div>` +
+          `<div class="tt-n">${NAMES[t]}<br>${D.period_ends[t][q]}</div>${flag}`,
+          (x0 + bw / 2) / W * box.clientWidth, (yTop) / H * box.clientHeight));
+        rect.addEventListener("pointerleave", () => tip.hide());
+        svg.appendChild(rect);
+        acc += v;
+      });
+
+      if (present.length) {
+        const tot = el("text", { x: cx, y: y(acc) - 9, "text-anchor": "middle", fill: "var(--ink)", "font-size": 12, "font-weight": 600 });
+        tot.setAttribute("font-family", "IBM Plex Mono, monospace");
+        tot.textContent = Math.round(acc).toLocaleString();
+        svg.appendChild(tot);
+      }
+
+      const qlab = el("text", { x: cx, y: H - M.b + 22, "text-anchor": "middle", fill: "var(--ink-2)", "font-size": 11.5 });
+      qlab.setAttribute("font-family", "IBM Plex Mono, monospace");
+      qlab.textContent = q.replace("20", "’").replace("Q", " Q");
+      svg.appendChild(qlab);
+
+      // coverage strip: one square per company, filled when disclosed
+      TICKERS.forEach((t, ti) => {
+        const sq = 7, gap = 2.5;
+        const totalW = TICKERS.length * sq + (TICKERS.length - 1) * gap;
+        const sx = cx - totalW / 2 + ti * (sq + gap);
+        const has = val(t, q, metric) != null;
+        svg.appendChild(el("rect", {
+          x: sx, y: H - M.b + 33, width: sq, height: sq,
+          fill: has ? COLOR[t] : "none",
+          stroke: has ? "none" : "var(--rule)", "stroke-width": 1
+        }));
+      });
+      const cov = el("text", { x: cx, y: H - M.b + 55, "text-anchor": "middle", fill: "var(--ink-3)", "font-size": 10 });
+      cov.setAttribute("font-family", "IBM Plex Mono, monospace");
+      cov.textContent = `${present.length}/6`;
+      svg.appendChild(cov);
+    });
+
+    svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: y(0), y2: y(0), stroke: "var(--rule)", "stroke-width": 1 }));
+    box.appendChild(svg);
+
+    document.getElementById("legend-stack").innerHTML = TICKERS.map(t =>
+      `<span class="item"><span class="sw" style="background:${COLOR[t]}"></span>${t}</span>`).join("");
+
+    document.getElementById("stack-title").textContent = METRIC_LABEL[metric];
+    const full = QUARTERS.filter(q => colTotal(q, metric).n === 6).length;
+    document.getElementById("stack-sub").textContent =
+      `Totals shown above each bar. All six companies report in ${full} of the ${QUARTERS.length} quarters.`;
+
+    // table view
+    let h = "<table><thead><tr><th>Quarter</th>" + TICKERS.map(t => `<th>${t}</th>`).join("") +
+      "<th>Total</th><th>Disclosed</th></tr></thead><tbody>";
+    for (const q of QUARTERS) {
+      const { total, n } = colTotal(q, metric);
+      h += `<tr><td>${q}</td>` + TICKERS.map(t => {
+        const v = val(t, q, metric);
+        return v == null ? `<td class="num empty">–</td>` : `<td class="num">${v.toFixed(1)}</td>`;
+      }).join("") + `<td class="num"><b>${n ? total.toFixed(1) : "–"}</b></td><td class="num empty">${n}/6</td></tr>`;
+    }
+    h += "</tbody></table>";
+    document.getElementById("table-stack").innerHTML = h;
+  }
+
+  /* ---------- small multiples: one panel per company, two measures ---------- */
+  // Colour encodes the measure and is constant across panels; the company is named
+  // by its panel. That keeps every panel to two well-separated hues rather than
+  // asking the reader to tell six apart at once.
+  const MEASURE_COLOR = { uncommenced_leases: "var(--s1)", purchase_commitments: "var(--s2)" };
+
+  function drawSmallMultiples() {
+    const host = document.getElementById("small-multiples");
+    host.innerHTML = "";
+
+    let peak = 0;
+    for (const t of TICKERS) for (const q of QUARTERS) for (const m in MEASURE_COLOR) {
+      const v = val(t, q, m); if (v != null && v > peak) peak = v;
+    }
+    const max = niceMax(peak);
+
+    for (const t of TICKERS) {
+      const panel = document.createElement("div");
+      panel.className = "sm";
+      const n = QUARTERS.filter(q => val(t, q, "uncommenced_leases") != null || val(t, q, "purchase_commitments") != null).length;
+      panel.innerHTML = `<div class="sm-head"><span class="t">${t}</span>` +
+        `<span class="n">${NAMES[t]} · ${n}/12 quarters</span></div>`;
+      const box = document.createElement("div");
+      box.className = "chartbox";
+      panel.appendChild(box);
+      host.appendChild(panel);
+
+      const tip = attachTip(box);
+      const W = 460, H = 250;
+      const M = { t: 16, r: 46, b: 34, l: 46 };
+      const iw = W - M.l - M.r, ih = H - M.t - M.b;
+      const y = v => M.t + ih - (v / max) * ih;
+      const x = i => M.l + (iw / (QUARTERS.length - 1)) * i;
+
+      const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+      svg.setAttribute("aria-label", `${NAMES[t]}: uncommenced leases and purchase commitments by quarter`);
+
+      for (let i = 0; i <= 2; i++) {
+        const v = (max / 2) * i, yy = y(v);
+        svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: yy, y2: yy, stroke: "var(--hairline)", "stroke-width": 1 }));
+        const lab = el("text", { x: M.l - 8, y: yy + 4, "text-anchor": "end", fill: "var(--ink-3)", "font-size": 11 });
+        lab.setAttribute("font-family", "IBM Plex Mono, monospace");
+        lab.textContent = Math.round(v);
+        svg.appendChild(lab);
+      }
+      [0, 4, 8, 11].forEach(i => {
+        const lab = el("text", { x: x(i), y: H - M.b + 19, "text-anchor": "middle", fill: "var(--ink-3)", "font-size": 10.5 });
+        lab.setAttribute("font-family", "IBM Plex Mono, monospace");
+        lab.textContent = QUARTERS[i].replace("20", "’");
+        svg.appendChild(lab);
+      });
+
+      for (const m in MEASURE_COLOR) {
+        const pts = [];
+        QUARTERS.forEach((q, i) => { const v = val(t, q, m); if (v != null) pts.push({ i, v, q }); });
+        if (!pts.length) continue;
+        // break the line where a quarter is missing, so a gap reads as "not disclosed"
+        const runs = [];
+        let run = [];
+        for (const p of pts) {
+          if (run.length && p.i !== run[run.length - 1].i + 1) { runs.push(run); run = []; }
+          run.push(p);
+        }
+        if (run.length) runs.push(run);
+        for (const r of runs) {
+          if (r.length < 2) continue;
+          svg.appendChild(el("path", {
+            d: "M" + r.map(p => `${x(p.i)},${y(p.v)}`).join("L"),
+            fill: "none", stroke: MEASURE_COLOR[m], "stroke-width": 2,
+            "stroke-linejoin": "round", "stroke-linecap": "round"
+          }));
+        }
+        for (const p of pts) {
+          svg.appendChild(el("circle", {
+            cx: x(p.i), cy: y(p.v), r: 4, fill: MEASURE_COLOR[m],
+            stroke: "var(--surface)", "stroke-width": 2
+          }));
+          const hit = el("circle", { cx: x(p.i), cy: y(p.v), r: 12, fill: "transparent" });
+          hit.style.cursor = "pointer";
+          const o = get(t, p.q, m);
+          const flag = STRONG.has(o.provenance) ? "" : `<div class="tt-n" style="color:var(--caution)">${o.provenance} — weakly sourced</div>`;
+          hit.addEventListener("pointerenter", () => tip.show(
+            `<div class="tt-q">${p.q} · ${t}</div><div class="tt-v">${bn(p.v)}</div>` +
+            `<div class="tt-n">${METRIC_LABEL[m]}<br>${D.period_ends[t][p.q]}</div>${flag}`,
+            x(p.i) / W * box.clientWidth, y(p.v) / H * box.clientHeight));
+          hit.addEventListener("pointerleave", () => tip.hide());
+          svg.appendChild(hit);
+        }
+        // value at the final point, so a flat-looking panel still states its number
+        const last = pts[pts.length - 1];
+        const lab = el("text", { x: x(last.i) + 6, y: y(last.v) + 4, fill: "var(--ink-2)", "font-size": 11 });
+        lab.setAttribute("font-family", "IBM Plex Mono, monospace");
+        lab.textContent = Math.round(last.v);
+        svg.appendChild(lab);
+      }
+
+      svg.appendChild(el("line", { x1: M.l, x2: W - M.r, y1: y(0), y2: y(0), stroke: "var(--rule)", "stroke-width": 1 }));
+      box.appendChild(svg);
+    }
+
+    document.getElementById("legend-sm").innerHTML =
+      `<span class="item"><span class="sw" style="background:${MEASURE_COLOR.uncommenced_leases}"></span>Uncommenced leases</span>` +
+      `<span class="item"><span class="sw" style="background:${MEASURE_COLOR.purchase_commitments}"></span>Purchase commitments</span>` +
+      `<span class="item" style="color:var(--ink-3)">Shared scale, 0 – ${max} $bn</span>`;
+  }
+
+  /* ---------- reconciliation table ---------- */
+  (function () {
+    const ms = { GOOGL: 332, MSFT: 142, META: 238, AMZN: 104, NVDA: 155, ORCL: 11 };
+    let h = "<table><thead><tr><th>Company</th><th>This dataset</th><th>Morgan Stanley</th><th>Diff</th></tr></thead><tbody>";
+    let a = 0, b = 0;
+    let circular = false;
+    for (const t of TICKERS) {
+      const o = get(t, "2026Q1", "purchase_commitments");
+      const v = o ? o.value : null;
+      // A row sourced from the same chart cannot corroborate it; say so rather
+      // than letting a 0.0 difference read as agreement.
+      const same = o && !STRONG.has(o.provenance);
+      if (same) circular = true;
+      a += v || 0; b += ms[t];
+      const d = v == null ? null : v - ms[t];
+      h += `<tr><td>${t}${same ? '<span style="color:var(--caution)">&nbsp;†</span>' : ""}</td>` +
+        `<td class="num">${v == null ? "–" : v.toFixed(1)}</td>` +
+        `<td class="num">${ms[t]}</td>` +
+        `<td class="num"${d != null && Math.abs(d) > 5 ? ' style="color:var(--caution)"' : ""}>` +
+        `${d == null ? "–" : (d > 0 ? "+" : "") + d.toFixed(1)}</td></tr>`;
+    }
+    h += `</tbody><tfoot><tr><td>Total</td><td class="num">${a.toFixed(1)}</td><td class="num">${b}</td>` +
+      `<td class="num">${(a - b).toFixed(1)}</td></tr></tfoot></table>`;
+    if (circular) {
+      h += `<p class="sec-note" style="font-size:12.5px;margin-top:10px">` +
+        `<span style="color:var(--caution)">†</span> This figure was itself taken from the Morgan Stanley ` +
+        `chart, so its zero difference is circular, not a confirmation.</p>`;
+    }
+    document.getElementById("table-recon").innerHTML = h;
+  })();
+
+  /* ---------- full data table ---------- */
+  const order = Object.fromEntries(QUARTERS.map((q, i) => [q, i]));
+  const slot = Object.fromEntries(D.companies.map((c, i) => [c.ticker, i]));
+  const rows = D.observations.slice().sort((p, q) =>
+    slot[p.ticker] - slot[q.ticker] || p.metric.localeCompare(q.metric) || order[p.quarter] - order[q.quarter]);
+
+  function renderAll(filter) {
+    const keep = rows.filter(o =>
+      filter === "all" ? true : filter === "weak" ? !STRONG.has(o.provenance) : o.metric === filter);
+    let h = "<table><thead><tr><th>Company</th><th>Quarter</th><th>Period end</th><th>Measure</th>" +
+      "<th>$bn</th><th>Source</th><th>Note</th></tr></thead><tbody>";
+    for (const o of keep) {
+      h += `<tr><td><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;` +
+        `background:${COLOR[o.ticker]};margin-right:7px"></span>${o.ticker}</td>` +
+        `<td>${o.quarter}</td><td class="num">${D.period_ends[o.ticker][o.quarter]}</td>` +
+        `<td class="tl">${METRIC_LABEL[o.metric]}</td>` +
+        `<td class="num">${o.value.toFixed(1)}</td>` +
+        `<td><span class="chip${STRONG.has(o.provenance) ? "" : " weak"}">${o.provenance}</span></td>` +
+        `<td class="tl" style="white-space:normal;max-width:44ch;color:var(--ink-2);font-size:12.5px">${o.note || ""}</td></tr>`;
+    }
+    h += `</tbody></table>`;
+    document.getElementById("table-all").innerHTML = h;
+  }
+
+  /* ---------- wiring ---------- */
+  document.querySelectorAll("#stacks .controls button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#stacks .controls button").forEach(b =>
+        b.setAttribute("aria-pressed", String(b === btn)));
+      drawStack(btn.dataset.metric);
+    });
+  });
+  document.querySelectorAll("#data .controls button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#data .controls button").forEach(b =>
+        b.setAttribute("aria-pressed", String(b === btn)));
+      renderAll(btn.dataset.filter);
+    });
+  });
+
+  function drawAll() {
+    const active = document.querySelector("#stacks .controls button[aria-pressed='true']");
+    drawStack(active ? active.dataset.metric : "purchase_commitments");
+    drawSmallMultiples();
+  }
+  drawAll();
+  renderAll("all");
+  let t0;
+  window.addEventListener("resize", () => { clearTimeout(t0); t0 = setTimeout(drawAll, 160); });
+})();
+</script>

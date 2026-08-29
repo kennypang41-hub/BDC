@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "title": "Hyperscaler off-balance-sheet commitments",
+    "units": "USD billions",
+    "compiled": "2026-08-28",
+    "metrics": {
+      "uncommenced_leases": "Signed leases that have not yet commenced. Under ASC 842 a lease is not recognised until the lessor makes the asset available, so these sit in the footnotes only.",
+      "purchase_commitments": "Non-cancelable purchase / supply / unconditional purchase obligations disclosed in the commitments footnote."
+    },
+    "provenance": {
+      "filing": "Figure quoted directly from the filing's footnote text or commitments table.",
+      "filing_table": "Figure from the filing's maturity table; the year-by-year rows sum to the stated total (arithmetic check passed).",
+      "press": "Figure reported by financial press citing the filing; not independently re-read.",
+      "derived": "Approximate, inferred from a reported change or ratio. Treat as indicative."
+    },
+    "collection_note": "SEC.gov and every filing mirror were unreachable from the build environment (egress policy blocked all hosts except GitHub). Figures were collected by searching filing text. Each observation carries its provenance; gaps are left empty rather than estimated."
+  },
+  "companies": [
+    {"ticker": "GOOGL", "name": "Alphabet Inc.", "cik": "0001652044", "fye": "Dec", "slot": 1},
+    {"ticker": "MSFT", "name": "Microsoft Corporation", "cik": "0000789019", "fye": "Jun", "slot": 2},
+    {"ticker": "META", "name": "Meta Platforms, Inc.", "cik": "0001326801", "fye": "Dec", "slot": 3},
+    {"ticker": "AMZN", "name": "Amazon.com, Inc.", "cik": "0001018724", "fye": "Dec", "slot": 4},
+    {"ticker": "NVDA", "name": "NVIDIA Corporation", "cik": "0001045810", "fye": "Jan", "slot": 5},
+    {"ticker": "ORCL", "name": "Oracle Corporation", "cik": "0001341439", "fye": "May", "slot": 6}
+  ],
+  "quarters": ["2023Q3", "2023Q4", "2024Q1", "2024Q2", "2024Q3", "2024Q4", "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2"],
+  "period_ends": {
+    "GOOGL": {"2023Q3": "2023-09-30", "2023Q4": "2023-12-31", "2024Q1": "2024-03-31", "2024Q2": "2024-06-30", "2024Q3": "2024-09-30", "2024Q4": "2024-12-31", "2025Q1": "2025-03-31", "2025Q2": "2025-06-30", "2025Q3": "2025-09-30", "2025Q4": "2025-12-31", "2026Q1": "2026-03-31", "2026Q2": "2026-06-30"},
+    "MSFT": {"2023Q3": "2023-09-30", "2023Q4": "2023-12-31", "2024Q1": "2024-03-31", "2024Q2": "2024-06-30", "2024Q3": "2024-09-30", "2024Q4": "2024-12-31", "2025Q1": "2025-03-31", "2025Q2": "2025-06-30", "2025Q3": "2025-09-30", "2025Q4": "2025-12-31", "2026Q1": "2026-03-31", "2026Q2": "2026-06-30"},
+    "META": {"2023Q3": "2023-09-30", "2023Q4": "2023-12-31", "2024Q1": "2024-03-31", "2024Q2": "2024-06-30", "2024Q3": "2024-09-30", "2024Q4": "2024-12-31", "2025Q1": "2025-03-31", "2025Q2": "2025-06-30", "2025Q3": "2025-09-30", "2025Q4": "2025-12-31", "2026Q1": "2026-03-31", "2026Q2": "2026-06-30"},
+    "AMZN": {"2023Q3": "2023-09-30", "2023Q4": "2023-12-31", "2024Q1": "2024-03-31", "2024Q2": "2024-06-30", "2024Q3": "2024-09-30", "2024Q4": "2024-12-31", "2025Q1": "2025-03-31", "2025Q2": "2025-06-30", "2025Q3": "2025-09-30", "2025Q4": "2025-12-31", "2026Q1": "2026-03-31", "2026Q2": "2026-06-30"},
+    "NVDA": {"2023Q3": "2023-10-29", "2023Q4": "2024-01-28", "2024Q1": "2024-04-28", "2024Q2": "2024-07-28", "2024Q3": "2024-10-27", "2024Q4": "2025-01-26", "2025Q1": "2025-04-27", "2025Q2": "2025-07-27", "2025Q3": "2025-10-26", "2025Q4": "2026-01-25", "2026Q1": "2026-04-26", "2026Q2": "2026-07-26"},
+    "ORCL": {"2023Q3": "2023-08-31", "2023Q4": "2023-11-30", "2024Q1": "2024-02-29", "2024Q2": "2024-05-31", "2024Q3": "2024-08-31", "2024Q4": "2024-11-30", "2025Q1": "2025-02-28", "2025Q2": "2025-05-31", "2025Q3": "2025-08-31", "2025Q4": "2025-11-30", "2026Q1": "2026-02-28", "2026Q2": "2026-05-31"}
+  },
+  "observations": [
+    {"ticker": "GOOGL", "quarter": "2025Q1", "metric": "uncommenced_leases", "value": 17.3, "provenance": "filing", "note": "Data-centre leases not yet commenced; future lease payments not yet recorded."},
+    {"ticker": "GOOGL", "quarter": "2025Q2", "metric": "uncommenced_leases", "value": 23.9, "provenance": "filing", "note": "Commence 2025-2031, terms 1-25 years."},
+    {"ticker": "GOOGL", "quarter": "2025Q3", "metric": "uncommenced_leases", "value": 42.6, "provenance": "filing", "note": "Includes a purchase option considered reasonably certain to be exercised."},
+    {"ticker": "GOOGL", "quarter": "2025Q4", "metric": "uncommenced_leases", "value": 58.5, "provenance": "filing", "note": "$5.8bn short-term + $52.7bn long-term."},
+    {"ticker": "GOOGL", "quarter": "2026Q1", "metric": "uncommenced_leases", "value": 75.6, "provenance": "filing", "note": "Commence 2026-2031, terms 1-25 years."},
+    {"ticker": "GOOGL", "quarter": "2026Q2", "metric": "uncommenced_leases", "value": 85.2, "provenance": "filing", "note": ""},
+
+    {"ticker": "GOOGL", "quarter": "2024Q2", "metric": "purchase_commitments", "value": 54.9, "provenance": "filing", "note": "$41.0bn short-term."},
+    {"ticker": "GOOGL", "quarter": "2025Q1", "metric": "purchase_commitments", "value": 62.1, "provenance": "filing", "note": "$41.5bn short-term."},
+    {"ticker": "GOOGL", "quarter": "2025Q2", "metric": "purchase_commitments", "value": 72.5, "provenance": "filing", "note": "$51.0bn short-term."},
+    {"ticker": "GOOGL", "quarter": "2025Q4", "metric": "purchase_commitments", "value": 149.1, "provenance": "filing", "note": "$113.0bn short-term."},
+    {"ticker": "GOOGL", "quarter": "2026Q1", "metric": "purchase_commitments", "value": 332.4, "provenance": "filing", "note": "$138.0bn short-term. Matches the Morgan Stanley 1Q26 chart ($332bn)."},
+    {"ticker": "GOOGL", "quarter": "2026Q2", "metric": "purchase_commitments", "value": 707.0, "provenance": "filing", "note": "Footnote figure. A broader MD&A measure including open purchase orders was reported at ~$811bn."},
+
+    {"ticker": "MSFT", "quarter": "2023Q3", "metric": "uncommenced_leases", "value": 82.6, "provenance": "filing", "note": "$7.5bn operating + $75.1bn finance."},
+    {"ticker": "MSFT", "quarter": "2024Q1", "metric": "uncommenced_leases", "value": 96.2, "provenance": "filing", "note": "$8.4bn operating + $87.8bn finance."},
+    {"ticker": "MSFT", "quarter": "2024Q2", "metric": "uncommenced_leases", "value": 117.0, "provenance": "filing", "note": "$8.6bn operating + $108.4bn finance. FY2024 10-K."},
+    {"ticker": "MSFT", "quarter": "2024Q3", "metric": "uncommenced_leases", "value": 116.1, "provenance": "filing", "note": "$7.4bn operating + $108.7bn finance."},
+    {"ticker": "MSFT", "quarter": "2025Q1", "metric": "uncommenced_leases", "value": 99.2, "provenance": "filing", "note": "$4.4bn operating + $94.8bn finance."},
+    {"ticker": "MSFT", "quarter": "2025Q2", "metric": "uncommenced_leases", "value": 92.7, "provenance": "filing", "note": "FY2025 10-K. Terms running to fiscal 2031."},
+    {"ticker": "MSFT", "quarter": "2025Q3", "metric": "uncommenced_leases", "value": 106.2, "provenance": "filing", "note": "Commence fiscal 2026-2031, terms 1-20 years."},
+    {"ticker": "MSFT", "quarter": "2025Q4", "metric": "uncommenced_leases", "value": 155.1, "provenance": "filing", "note": "Commence fiscal 2026-2031."},
+    {"ticker": "MSFT", "quarter": "2026Q1", "metric": "uncommenced_leases", "value": 196.6, "provenance": "filing", "note": ""},
+    {"ticker": "MSFT", "quarter": "2026Q2", "metric": "uncommenced_leases", "value": 329.1, "provenance": "filing", "note": "FY2026 10-K. Up $132.5bn in one quarter; commence fiscal 2027-2033."},
+
+    {"ticker": "MSFT", "quarter": "2025Q2", "metric": "purchase_commitments", "value": 109.95, "provenance": "filing", "note": "FY2025 10-K contractual obligations table. Construction commitments of $32.15bn are additional."},
+    {"ticker": "MSFT", "quarter": "2026Q1", "metric": "purchase_commitments", "value": 142.0, "provenance": "press", "note": "Morgan Stanley 1Q26 chart; not re-read from the filing."},
+    {"ticker": "MSFT", "quarter": "2026Q2", "metric": "purchase_commitments", "value": 194.06, "provenance": "filing", "note": "FY2026 10-K contractual obligations table. Construction commitments of $34.57bn are additional."},
+
+    {"ticker": "META", "quarter": "2024Q3", "metric": "uncommenced_leases", "value": 18.49, "provenance": "filing", "note": "Mostly data centres and colocations."},
+    {"ticker": "META", "quarter": "2025Q1", "metric": "uncommenced_leases", "value": 35.27, "provenance": "filing", "note": ""},
+    {"ticker": "META", "quarter": "2025Q2", "metric": "uncommenced_leases", "value": 52.56, "provenance": "filing", "note": "Commence remainder of 2025 through 2034."},
+    {"ticker": "META", "quarter": "2025Q3", "metric": "uncommenced_leases", "value": 58.14, "provenance": "filing", "note": ""},
+    {"ticker": "META", "quarter": "2025Q4", "metric": "uncommenced_leases", "value": 103.77, "provenance": "filing", "note": "Commence 2026-2030, terms up to 30 years."},
+    {"ticker": "META", "quarter": "2026Q1", "metric": "uncommenced_leases", "value": 182.88, "provenance": "filing", "note": "Corroborated by the reported 53% jump to $279bn the following quarter."},
+    {"ticker": "META", "quarter": "2026Q2", "metric": "uncommenced_leases", "value": 278.99, "provenance": "filing", "note": "Commence remainder of 2026 through 2036. A further ~$68bn was signed in July, after the balance sheet date."},
+
+    {"ticker": "META", "quarter": "2024Q3", "metric": "purchase_commitments", "value": 32.14, "provenance": "filing", "note": ""},
+    {"ticker": "META", "quarter": "2025Q1", "metric": "purchase_commitments", "value": 30.05, "provenance": "filing", "note": "Mostly servers, network infrastructure and content costs."},
+    {"ticker": "META", "quarter": "2025Q2", "metric": "purchase_commitments", "value": 28.0, "provenance": "derived", "note": "Approximate: press describes the run from ~$28bn to $349.3bn over the four quarters to 2026Q2."},
+    {"ticker": "META", "quarter": "2025Q3", "metric": "purchase_commitments", "value": 81.19, "provenance": "filing", "note": "Mostly third-party cloud capacity arrangements."},
+    {"ticker": "META", "quarter": "2025Q4", "metric": "purchase_commitments", "value": 131.05, "provenance": "filing", "note": "$30.63bn due in 2026."},
+    {"ticker": "META", "quarter": "2026Q1", "metric": "purchase_commitments", "value": 237.67, "provenance": "filing", "note": "Matches the Morgan Stanley 1Q26 chart ($238bn)."},
+    {"ticker": "META", "quarter": "2026Q2", "metric": "purchase_commitments", "value": 349.31, "provenance": "filing", "note": "Multi-year cloud deals drove a ~$112bn step up in the quarter."},
+
+    {"ticker": "AMZN", "quarter": "2024Q4", "metric": "uncommenced_leases", "value": 61.627, "provenance": "filing_table", "note": ""},
+    {"ticker": "AMZN", "quarter": "2025Q2", "metric": "uncommenced_leases", "value": 68.884, "provenance": "filing_table", "note": ""},
+    {"ticker": "AMZN", "quarter": "2025Q4", "metric": "uncommenced_leases", "value": 96.373, "provenance": "filing_table", "note": "Maturity rows sum to the total."},
+    {"ticker": "AMZN", "quarter": "2026Q1", "metric": "uncommenced_leases", "value": 106.347, "provenance": "filing_table", "note": "Maturity rows sum to the total."},
+    {"ticker": "AMZN", "quarter": "2026Q2", "metric": "uncommenced_leases", "value": 137.2, "provenance": "derived", "note": "Approximate: press reports the line roughly doubled year-on-year to $137.2bn."},
+
+    {"ticker": "AMZN", "quarter": "2024Q4", "metric": "purchase_commitments", "value": 50.375, "provenance": "filing_table", "note": "Unconditional purchase obligations."},
+    {"ticker": "AMZN", "quarter": "2025Q2", "metric": "purchase_commitments", "value": 71.018, "provenance": "filing_table", "note": "Unconditional purchase obligations."},
+    {"ticker": "AMZN", "quarter": "2025Q4", "metric": "purchase_commitments", "value": 84.772, "provenance": "filing_table", "note": "Maturity rows sum to the total."},
+    {"ticker": "AMZN", "quarter": "2026Q1", "metric": "purchase_commitments", "value": 103.768, "provenance": "filing_table", "note": "Maturity rows sum to the total. Matches the Morgan Stanley 1Q26 chart ($104bn). A further $18.81bn of 'other commitments' is disclosed separately."},
+
+    {"ticker": "NVDA", "quarter": "2025Q1", "metric": "purchase_commitments", "value": 43.5, "provenance": "filing", "note": "$29.8bn inventory/supply + $13.7bn other purchase obligations (of which $10.6bn multi-year cloud)."},
+    {"ticker": "NVDA", "quarter": "2025Q4", "metric": "purchase_commitments", "value": 95.2, "provenance": "filing", "note": "FY2026 10-K. Inventory purchase and long-term supply/capacity obligations; excludes other purchase obligations, so understates the comparable total."},
+    {"ticker": "NVDA", "quarter": "2026Q1", "metric": "purchase_commitments", "value": 119.0, "provenance": "filing", "note": "Purchase commitments and supply obligations; $95bn payable in the remainder of fiscal 2027."},
+    {"ticker": "NVDA", "quarter": "2026Q2", "metric": "purchase_commitments", "value": 279.0, "provenance": "filing", "note": "Supply and capacity commitments, driven by memory procurement. Cloud service agreements of $29bn are disclosed separately."},
+
+    {"ticker": "ORCL", "quarter": "2025Q3", "metric": "uncommenced_leases", "value": 99.8, "provenance": "filing", "note": "Substantially all data centres; a further $6.6bn was signed after the balance sheet date."},
+    {"ticker": "ORCL", "quarter": "2025Q4", "metric": "uncommenced_leases", "value": 248.0, "provenance": "filing", "note": "Up ~148% in one quarter; terms of 15-19 years."},
+    {"ticker": "ORCL", "quarter": "2026Q1", "metric": "uncommenced_leases", "value": 261.0, "provenance": "filing", "note": "Includes a lease where Oracle guarantees up to $2.2bn of the lessor's borrowing."},
+    {"ticker": "ORCL", "quarter": "2026Q2", "metric": "uncommenced_leases", "value": 260.0, "provenance": "filing", "note": "FY2026 10-K. Commence Q4 FY2026 through FY2028."},
+
+    {"ticker": "ORCL", "quarter": "2025Q4", "metric": "purchase_commitments", "value": 10.0, "provenance": "filing", "note": "Unconditional purchase and certain other obligations, primarily cloud capacity."},
+    {"ticker": "ORCL", "quarter": "2026Q1", "metric": "purchase_commitments", "value": 11.0, "provenance": "press", "note": "Morgan Stanley 1Q26 chart ($11bn); the filing states the obligations relate primarily to data-centre power but the amount was not re-read."},
+    {"ticker": "ORCL", "quarter": "2026Q2", "metric": "purchase_commitments", "value": 13.309, "provenance": "filing", "note": "FY2026 10-K; primarily data-centre power arrangements."}
+  ],
+  "series_notes": {
+    "NVDA_uncommenced_leases": "NVIDIA does not disclose a material 'leases not yet commenced' balance. Its off-balance-sheet exposure sits in supply and capacity purchase obligations instead, so this series is empty by disclosure, not by omission.",
+    "ORCL_early": "Oracle only began disclosing a large uncommenced-lease balance in fiscal 2026; earlier quarters carried immaterial amounts.",
+    "reconciliation_ms_1q26": "Morgan Stanley counted $982bn of purchase commitments across the six at 31 Mar 2026. This dataset totals $945.8bn for the same date. Five of six agree to the rounding: GOOGL 332.4 vs 332, MSFT 142 vs 142, META 237.7 vs 238, AMZN 103.8 vs 104, ORCL 11 vs 11. The whole $36bn gap is NVIDIA, where this dataset carries the $119bn disclosed for the quarter ended 26 Apr 2026 and Morgan Stanley used $155bn - most likely NVIDIA's fiscal year-end (25 Jan 2026) figure on a broader definition that folds in other purchase obligations and cloud service agreements. Substituting 155 gives $981.8bn.",
+    "reconciliation_leases": "The 2026Q2 uncommenced-lease total here is $1,090bn, against press reporting of roughly $1.09tn of not-yet-started data-centre leases across big tech. The two are close but not the same population, so treat the agreement as corroboration rather than a match.",
+    "definitions": "The six filers do not use one definition. Alphabet reports 'purchase commitments and other contractual obligations'; Microsoft a contractual-obligations 'purchase commitments' line; Meta 'non-cancelable contractual commitments'; Amazon 'unconditional purchase obligations'; NVIDIA 'purchase commitments and supply obligations'; Oracle 'unconditional purchase and certain other obligations'. Totals across companies are therefore indicative, not like-for-like."
+  }
+}
