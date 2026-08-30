@@ -53,17 +53,26 @@ class Position:
 
     @property
     def mark(self) -> float | None:
-        """Fair value as a percentage of the position's par (or cost for equity).
+        """Fair value over principal, as a percentage.
 
-        This is "the mark" the whole tracker is built on: 100 means held at par,
-        below 100 means the BDC has written the position down.
+        This is "the mark" the whole tracker is built on: 100 means the BDC
+        carries the position at par, below 100 means it has written it down.
+
+        Principal is the denominator whenever the filing reports one. Only when
+        it does not — equity, and debt the filer left untagged — does this fall
+        back to cost, which is what :attr:`mark_basis` records.
         """
-        base = self.principal if self.is_debt else None
-        if base is None or base == 0:
-            base = self.cost
+        base = self.mark_basis
         if base is None or base == 0 or self.fair_value is None:
             return None
         return float(self.fair_value) / float(base) * 100.0
+
+    @property
+    def mark_basis(self) -> Decimal | None:
+        """The denominator the mark actually used: principal, else cost."""
+        if self.principal is not None and self.principal != 0:
+            return self.principal
+        return self.cost
 
     @property
     def unrealized(self) -> Decimal | None:

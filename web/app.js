@@ -194,7 +194,7 @@ const views = {
     const tiles = document.getElementById("overview-tiles");
     tiles.replaceChildren(
       tile("Portfolio mark", fmt.mark(overview.portfolio_mark),
-        "fair value ÷ par, debt positions"),
+        "fair value ÷ principal, debt positions"),
       tile("Fair value", fmt.money(overview.fair_value), `${fmt.num(overview.positions)} positions`),
       tile("BDCs", fmt.num(overview.bdcs), `${fmt.num(overview.issuers)} borrowers`),
       tile("Marks extracted", fmt.num(overview.total_marks),

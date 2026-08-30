@@ -216,3 +216,42 @@ def test_genuinely_distinct_facilities_still_sum():
     assert len(merged) == 1
     assert merged[0].principal == Decimal("3000")
     assert merged[0].fair_value == Decimal("2700")
+
+
+# ---------------------------------------------------------------------------
+# Which denominator the mark divides by
+# ---------------------------------------------------------------------------
+
+def test_principal_is_the_denominator_whenever_the_filing_reports_one():
+    position = make(fair_value=Decimal("9000"), principal=Decimal("10000"), cost=Decimal("9500"))
+    assert position.mark_basis == Decimal("10000")
+    assert position.mark == pytest.approx(90.0)
+
+
+def test_cost_stands_in_only_where_there_is_no_principal():
+    position = make(identifier="Acme Corp, Common Equity",
+                    fair_value=Decimal("1200"), cost=Decimal("1000"))
+    assert position.mark_basis == Decimal("1000")
+    assert position.mark == pytest.approx(120.0)
+
+
+def test_equity_with_a_reported_principal_marks_against_it_not_cost():
+    """Preferred equity is sometimes tagged with principal; prefer it."""
+    position = make(
+        identifier="Acme Corp, Preferred Equity",
+        fair_value=Decimal("900"), principal=Decimal("1000"), cost=Decimal("500"),
+    )
+    assert not position.is_debt
+    assert position.mark_basis == Decimal("1000")
+    assert position.mark == pytest.approx(90.0)
+
+
+def test_a_zero_principal_falls_through_to_cost():
+    """An undrawn revolver reports zero principal; zero is not a denominator."""
+    position = make(fair_value=Decimal("450"), principal=Decimal("0"), cost=Decimal("500"))
+    assert position.mark_basis == Decimal("500")
+    assert position.mark == pytest.approx(90.0)
+
+
+def test_no_denominator_at_all_yields_no_mark():
+    assert make(fair_value=Decimal("100")).mark is None

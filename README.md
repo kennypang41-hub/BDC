@@ -4,7 +4,8 @@ Loan-level valuation marks for US Business Development Companies, extracted from
 SEC EDGAR and served as a tracker.
 
 A BDC's 10-K/10-Q carries a **Consolidated Schedule of Investments**: every loan
-it holds, with par, cost and fair value. Fair value over par is *the mark* — the
+it holds, with principal, cost and fair value. Fair value over principal is *the
+mark* — the
 lender's own opinion of what the loan is worth. Collect the marks across every
 BDC and every quarter and you can see which borrowers are deteriorating, which
 lenders are slow to write down, and where two lenders looking at the same credit

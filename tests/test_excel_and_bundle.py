@@ -71,7 +71,12 @@ def test_mark_is_a_live_formula_not_a_baked_number(conn, tmp_path):
     mark_column = headers.index("Mark (% of principal)") + 1
     formula = sheet.cell(row=2, column=mark_column).value
     assert isinstance(formula, str) and formula.startswith("=IFERROR(")
-    assert "/" in formula and "*100" in formula
+    assert "*100" in formula
+
+    # It must divide by Principal, using Mark basis only as a fallback.
+    principal = get_column_letter(headers.index("Principal") + 1)
+    basis = get_column_letter(headers.index("Mark basis (fallback)") + 1)
+    assert f"IF({principal}2>0,{principal}2,{basis}2)" in formula
 
 
 def test_mark_basis_is_par_for_debt_and_cost_for_equity(conn, tmp_path):
@@ -79,7 +84,7 @@ def test_mark_basis_is_par_for_debt_and_cost_for_equity(conn, tmp_path):
     excel.export_workbook(conn, target)
     sheet = load_workbook(target)["Marks"]
     headers = [cell.value for cell in sheet[1]]
-    basis = headers.index("Mark basis") + 1
+    basis = headers.index("Mark basis (fallback)") + 1
     borrower = headers.index("Borrower") + 1
     instrument = headers.index("Instrument") + 1
 

@@ -46,7 +46,7 @@ MARK_COLUMNS: list[tuple[str, str | None, str | None, int]] = [
     ("Principal",             "principal",         MONEY,         16),
     ("Cost",                  "cost",              MONEY,         16),
     ("Fair value",            "fair_value",        MONEY,         16),
-    ("Mark basis",            "mark_basis",        MONEY,         16),
+    ("Mark basis (fallback)", "mark_basis",        MONEY,         16),
     ("Mark (% of principal)", None,                PRICE,         14),
     ("Unrealised",            None,                MONEY_SIGNED,  16),
     ("Unrealised vs cost",    None,                PCT1,          16),
@@ -84,7 +84,7 @@ SELECT
     i.display_name AS issuer_name,
     l.investment_type, l.lien, l.facility, m.industry, l.currency,
     m.principal, m.cost, m.fair_value, m.shares,
-    CASE WHEN l.is_debt = 1 AND m.principal > 0 THEN m.principal ELSE m.cost END AS mark_basis,
+    CASE WHEN m.principal > 0 THEN m.principal ELSE m.cost END AS mark_basis,
     m.interest_rate, m.spread, m.reference_rate, m.pik_rate, m.pct_net_assets,
     m.maturity_date, m.acquisition_date, m.fair_value_level,
     CASE WHEN m.is_non_accrual = 1 THEN 'Yes'
@@ -127,7 +127,8 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> tuple[int, dic
     _style_header(sheet, MARK_COLUMNS)
 
     fair_value = _letter("Fair value")
-    basis = _letter("Mark basis")
+    basis = _letter("Mark basis (fallback)")
+    principal = _letter("Principal")
     cost = _letter("Cost")
     mark = _letter("Mark (% of principal)")
     unrealised = _letter("Unrealised")
@@ -146,7 +147,14 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> tuple[int, dic
         for header, source, number_format, _width in MARK_COLUMNS:
             if source is None:
                 if header == "Mark (% of principal)":
-                    value = f"=IFERROR({fair_value}{row_number}/{basis}{row_number}*100,\"\")"
+                    # Principal is the denominator; mark basis only stands in
+                    # where the filing reports no principal (equity, or debt the
+                    # filer left untagged).
+                    value = (
+                        f"=IFERROR({fair_value}{row_number}"
+                        f"/IF({principal}{row_number}>0,{principal}{row_number},"
+                        f"{basis}{row_number})*100,\"\")"
+                    )
                 elif header == "Unrealised":
                     value = f"=IFERROR({fair_value}{row_number}-{cost}{row_number},\"\")"
                 else:  # Unrealised vs cost
@@ -357,7 +365,7 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
         "Fair value divided by principal, as reported in the filing, times 100. "
         "100 means the BDC carries the loan at par; below 100 means it has written the "
         "position down. Equity has no principal, so it is marked against cost instead — "
-        "the 'Mark basis' column always shows which denominator that row used.")
+        "the 'Mark basis (fallback)' column holds that stand-in denominator.")
     put("Principal",
         "Principal outstanding as the filing reports it. Blank where the filer did not "
         "tag it, in which case the mark falls back to cost and the row carries the "
