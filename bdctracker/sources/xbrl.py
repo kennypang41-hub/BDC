@@ -17,6 +17,7 @@ so there is one set per position:
 from __future__ import annotations
 
 import logging
+import re
 from collections import defaultdict
 from datetime import date
 from typing import Iterable, Sequence
@@ -47,7 +48,7 @@ RATE_FIELDS = {"interest_rate", "spread", "pik_rate", "pct_net_assets"}
 DATE_FIELDS = {"maturity_date", "acquisition_date"}
 MONEY_FIELDS = {"fair_value", "cost", "principal", "shares"}
 
-#: Dimension suffix -> descriptive field we care about.
+#: Dimension suffix -> descriptive field, for the axes the taxonomy names.
 DIMENSION_FIELDS = {
     "InvestmentIssuerNameAxis": "issuer",
     "InvestmentTypeAxis": "investment_type",
@@ -60,6 +61,27 @@ DIMENSION_FIELDS = {
     "InvestmentIssuerAffiliationAxis": "affiliation",
     "InvestmentNameAxis": "investment_name",
 }
+
+#: Filers routinely define their own axes for industry and geography, so match
+#: on what the axis is *about* rather than on an exact name. Extending the map
+#: above one filer at a time never converges — there are forty-three of them.
+DIMENSION_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
+    (re.compile(r"industr|sector", re.I), "industry"),
+    (re.compile(r"geograph|countr|region|jurisdiction", re.I), "country"),
+    (re.compile(r"lien", re.I), "lien_category"),
+    (re.compile(r"issuer.*name|portfolio.*compan", re.I), "issuer"),
+)
+
+
+def _dimension_field(axis: str) -> str:
+    """Name the field an axis populates, by taxonomy name then by subject."""
+    known = DIMENSION_FIELDS.get(axis)
+    if known:
+        return known
+    for pattern, field in DIMENSION_PATTERNS:
+        if pattern.search(axis):
+            return field
+    return axis
 
 
 def _clean_member(value) -> str | None:
@@ -80,7 +102,10 @@ def _describe_dimensions(fact: dict) -> dict[str, str]:
         if cleaned is None:
             continue
         axis = key.rsplit("_", 1)[-1]
-        out[DIMENSION_FIELDS.get(axis, axis)] = cleaned
+        field = _dimension_field(axis)
+        # First writer wins: a taxonomy axis should not be overwritten by a
+        # custom one that happens to sort later.
+        out.setdefault(field, cleaned)
     return out
 
 
@@ -156,6 +181,7 @@ def positions_from_xbrl(
             issuer_name=dims.get("issuer", "") or "",
             tranche_text=descriptor or None,
             industry=dims.get("industry"),
+            country=dims.get("country"),
             fair_value=normalize.to_decimal(bucket.get("fair_value")),
             cost=normalize.to_decimal(bucket.get("cost")),
             principal=normalize.to_decimal(bucket.get("principal")),

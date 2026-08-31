@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import zipfile
 from dataclasses import dataclass
 from datetime import date
@@ -35,6 +36,9 @@ COLUMN_MAP = {
     "Investment, Name Axis": "investment_name",
     "Investment Type Axis": "investment_type",
     "Industry Sector Axis": "industry",
+    "Geographical Axis": "country",
+    "Statement Geographical Axis": "country",
+    "Investment, Country Axis": "country",
     "Investment, Issuer Affiliation Axis": "affiliation",
     "Lien Category Axis": "lien_category",
     "Asset Class Axis": "asset_class",
@@ -158,6 +162,27 @@ def read_quarter(zip_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     return soi, subs
 
 
+#: Filers define their own axes, so any column whose label is *about* industry
+#: or geography feeds those fields even when its name is not in COLUMN_MAP.
+_SUBJECT_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
+    (re.compile(r"industr|sector", re.I), "industry"),
+    (re.compile(r"geograph|countr|region|jurisdiction", re.I), "country"),
+)
+
+
+def _subject_columns(columns) -> dict[str, str]:
+    """Map unrecognised axis columns onto the field they describe."""
+    out: dict[str, str] = {}
+    for column in columns:
+        if column in COLUMN_MAP.values():
+            continue
+        for pattern, field in _SUBJECT_PATTERNS:
+            if pattern.search(str(column)):
+                out.setdefault(field, str(column))
+                break
+    return out
+
+
 def tidy(soi: pd.DataFrame) -> pd.DataFrame:
     """Rename DERA's label columns and strip ``[Member]`` decoration."""
     if soi.empty:
@@ -190,6 +215,7 @@ def to_positions(frame: pd.DataFrame, ciks: Iterable[int] | None = None) -> list
     if frame.empty:
         return []
 
+    extra = _subject_columns(frame.columns)
     positions: list[Position] = []
     for row in frame.to_dict(orient="records"):
         series = pd.Series(row)
@@ -221,7 +247,10 @@ def to_positions(frame: pd.DataFrame, ciks: Iterable[int] | None = None) -> list
             identifier=str(identifier),
             issuer_name=str(issuer) if issuer else "",
             tranche_text=descriptor or None,
-            industry=_first(series, "industry"),
+            industry=_first(series, "industry", *(
+                [extra["industry"]] if "industry" in extra else [])),
+            country=_first(series, "country", *(
+                [extra["country"]] if "country" in extra else [])),
             fair_value=normalize.to_decimal(_first(series, "fair_value")),
             cost=normalize.to_decimal(_first(series, "cost")),
             principal=normalize.to_decimal(_first(series, "principal")),

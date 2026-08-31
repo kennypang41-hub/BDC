@@ -88,6 +88,21 @@ def api_sectors(quarters: int = 8, conn=Depends(get_conn)):
     return analytics.sector_marks(conn, quarters)
 
 
+@app.get("/api/quarterly/marks")
+def api_quarterly_marks(since: str = analytics.DEFAULT_SINCE, conn=Depends(get_conn)):
+    return analytics.quarterly_bdc_marks(conn, since)
+
+
+@app.get("/api/quarterly/nonaccrual-marks")
+def api_quarterly_na_marks(since: str = analytics.DEFAULT_SINCE, conn=Depends(get_conn)):
+    return analytics.quarterly_nonaccrual_marks(conn, since)
+
+
+@app.get("/api/quarterly/nonaccrual-share")
+def api_quarterly_na_share(since: str = analytics.DEFAULT_SINCE, conn=Depends(get_conn)):
+    return analytics.quarterly_nonaccrual_share(conn, since)
+
+
 @app.get("/api/maturities")
 def api_maturities(period: str | None = None, conn=Depends(get_conn)):
     return analytics.maturity_wall(conn, period)

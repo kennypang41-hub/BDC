@@ -11,7 +11,7 @@ ARCC = BDC(ticker="ARCC", cik=1287750, name="Ares Capital", exchange="Nasdaq")
 TSLX = BDC(ticker="TSLX", cik=1508655, name="Sixth Street", exchange="NYSE")
 
 
-def position(cik, period, identifier, fv, par, cost=None, **kwargs):
+def position(cik, period, identifier, fv, par, cost=None, **kwargs):  # noqa: D103
     return normalize.finalize(
         Position(
             cik=cik,
@@ -168,3 +168,52 @@ def test_overview(conn):
     assert summary["bdcs"] == 2
     assert summary["total_marks"] == 5
     assert summary["portfolio_mark"] == pytest.approx(100 * 18 / 25)
+
+
+# ---------------------------------------------------------------------------
+# Quarterly series
+# ---------------------------------------------------------------------------
+
+def test_quarterly_marks_weight_by_principal_not_by_position_count(conn):
+    rows = {r["ticker"]: r for r in analytics.quarterly_bdc_marks(conn, since="2025-01-01")
+            if r["quarter"] == "2025Q4"}
+    # ARCC debt at 2025-12-31: (9.0m + 2.0m) / (10m + 5m). A plain average of
+    # the two marks (90 and 40) would give 65.
+    assert rows["ARCC"]["weighted_mark"] == pytest.approx(100 * 11 / 15)
+
+
+def test_quarterly_marks_align_filers_on_the_calendar_quarter(conn):
+    """A November period end and a December one are the same quarter."""
+    db.load_positions(conn, [
+        position(TSLX.cik, date(2025, 11, 30), "Delta Corp, First Lien Term Loan",
+                 950, 1_000),
+    ])
+    conn.commit()
+    quarters = {r["quarter"] for r in analytics.quarterly_bdc_marks(conn, since="2025-01-01")}
+    assert "2025Q4" in quarters
+
+
+def test_quarterly_nonaccrual_mark_covers_only_the_nonaccrual_book(conn):
+    rows = analytics.quarterly_nonaccrual_marks(conn, since="2025-01-01")
+    ares = [r for r in rows if r["ticker"] == "ARCC" and r["quarter"] == "2025Q4"]
+    assert len(ares) == 1
+    # Beta alone: 2.0m fair value on 5.0m principal.
+    assert ares[0]["weighted_mark"] == pytest.approx(40.0)
+    assert ares[0]["positions"] == 1
+
+
+def test_quarterly_nonaccrual_share_is_of_market_value(conn):
+    rows = {r["ticker"]: r for r in
+            analytics.quarterly_nonaccrual_share(conn, since="2025-01-01")
+            if r["quarter"] == "2025Q4"}
+    # ARCC: 2.0m non-accrual against 11.1m total fair value.
+    assert rows["ARCC"]["nonaccrual_pct"] == pytest.approx(100 * 2.0 / 11.1, rel=1e-3)
+    assert rows["ARCC"]["nonaccrual_fair_value"] == pytest.approx(2_000_000)
+
+
+def test_quarterly_nonaccrual_share_is_null_where_nothing_was_disclosed(conn):
+    rows = {r["ticker"]: r for r in
+            analytics.quarterly_nonaccrual_share(conn, since="2025-01-01")
+            if r["quarter"] == "2025Q4"}
+    assert rows["TSLX"]["coverage"] == 0
+    assert rows["TSLX"]["nonaccrual_pct"] is None

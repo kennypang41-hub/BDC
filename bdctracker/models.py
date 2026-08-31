@@ -20,6 +20,7 @@ class Position:
     facility: str | None = None
     tranche_text: str | None = None
     industry: str | None = None
+    country: str | None = None
     currency: str = "USD"
 
     fair_value: Decimal | None = None

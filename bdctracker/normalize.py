@@ -34,6 +34,75 @@ _CURRENCIES = (
 
 _NONACCRUAL = re.compile(r"non[\s-]*accrual|nonaccrual", re.I)
 
+#: Filers who do not tag a maturity date usually still write it in the label.
+_MATURITY_IN_LABEL = re.compile(
+    # Whitespace and punctuation only between the keyword and the date: a gap
+    # that could match letters eats into the month name ("due March" -> "rch").
+    r"\b(?:due|matur(?:es|ity|ing))\b[\s:,-]{0,6}"
+    r"(\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2}"
+    r"|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}|[A-Za-z]{3,9}\.?\s+\d{4})",
+    re.I,
+)
+
+#: Two-letter and common long-form country names seen in SOI geography members.
+_COUNTRY_ALIASES = {
+    "US": "United States", "USA": "United States", "U.S.": "United States",
+    "UNITED STATES OF AMERICA": "United States", "UNITED STATES": "United States",
+    "UK": "United Kingdom", "U.K.": "United Kingdom",
+    "GREAT BRITAIN": "United Kingdom", "UNITED KINGDOM": "United Kingdom",
+    "CA": "Canada", "CANADA": "Canada", "AU": "Australia", "AUSTRALIA": "Australia",
+    "DE": "Germany", "GERMANY": "Germany", "FR": "France", "FRANCE": "France",
+    "NL": "Netherlands", "NETHERLANDS": "Netherlands", "IE": "Ireland",
+    "IRELAND": "Ireland", "LU": "Luxembourg", "LUXEMBOURG": "Luxembourg",
+    "CH": "Switzerland", "SWITZERLAND": "Switzerland", "SE": "Sweden",
+    "SWEDEN": "Sweden", "ES": "Spain", "SPAIN": "Spain", "IT": "Italy",
+    "ITALY": "Italy", "NZ": "New Zealand", "NEW ZEALAND": "New Zealand",
+    "SG": "Singapore", "SINGAPORE": "Singapore", "IN": "India", "INDIA": "India",
+    "IL": "Israel", "ISRAEL": "Israel", "BM": "Bermuda", "BERMUDA": "Bermuda",
+    "KY": "Cayman Islands", "CAYMAN ISLANDS": "Cayman Islands",
+}
+
+#: Currencies imply a country only when the filer said nothing else.
+_CURRENCY_COUNTRY = {
+    "GBP": "United Kingdom", "CAD": "Canada", "AUD": "Australia",
+    "SEK": "Sweden", "DKK": "Denmark", "NOK": "Norway", "CHF": "Switzerland",
+}
+
+
+def maturity_from_label(*texts: str | None) -> date | None:
+    """Read a maturity out of the position label.
+
+    Three quarters of positions arrive without a tagged maturity date, but the
+    label almost always carries one — "due 6/30/2029" — because it is what the
+    schedule prints.
+    """
+    joined = " ".join(t for t in texts if t)
+    match = _MATURITY_IN_LABEL.search(joined)
+    if not match:
+        return None
+    text = match.group(1).strip().rstrip(",")
+    parsed = to_date(text)
+    if parsed:
+        return parsed
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%B %d %Y", "%b %d %Y", "%B %Y", "%b %Y"):
+        try:
+            return datetime.strptime(text.replace(".", ""), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def canonical_country(value: str | None, currency: str | None = None) -> str | None:
+    """Normalise a geography member; fall back to what the currency implies."""
+    if value:
+        text = re.sub(r"\[member\]|member$", "", str(value), flags=re.I).strip(" .,")
+        text = _WS.sub(" ", text) if (_WS := re.compile(r"\s+")) else text
+        if text:
+            return _COUNTRY_ALIASES.get(text.upper(), text)
+    if currency and currency != "USD":
+        return _CURRENCY_COUNTRY.get(currency)
+    return "United States" if currency == "USD" else None
+
 _DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y%m%d", "%d-%b-%Y", "%b %d, %Y")
 
 
@@ -159,6 +228,9 @@ def finalize(position: Position) -> Position:
     )
     if position.is_non_accrual is None:
         position.is_non_accrual = detect_non_accrual(position.tranche_text, position.identifier)
+    if position.maturity_date is None:
+        position.maturity_date = maturity_from_label(position.identifier, position.tranche_text)
+    position.country = canonical_country(position.country, position.currency)
 
     position.issuer_id = identity.issuer_key(position.issuer_name)
     position.credit_id = identity.credit_key(position.issuer_name, position.investment_type)

@@ -307,9 +307,16 @@ const views = {
   },
 
   async marks() {
-    const [sectors, markdowns] = await Promise.all([
-      Data.get("sector_marks"), Data.get("markdowns"),
+    const [sectors, markdowns, countries] = await Promise.all([
+      Data.get("sector_marks"), Data.get("markdowns"), Data.get("country_exposure"),
     ]);
+
+    table("table-countries", countries, [
+      { key: "country", label: "Country", text: true },
+      { key: "fair_value", label: "Fair value", format: fmt.money },
+      { key: "weighted_mark", label: "Mark", render: (row) => markCell(row.weighted_mark) },
+      { key: "positions", label: "Positions", format: fmt.num },
+    ], { sort: "fair_value", empty: "No country tagged in this period's filings." });
     heatmap(document.getElementById("chart-sectors"), sectors, {
       row: "industry", col: "period_end", value: "weighted_mark",
       label: "Weighted average mark by sector and quarter",
@@ -354,6 +361,77 @@ const views = {
     ], { sort: "maturity_year", dir: "asc" });
   },
 
+  async trends() {
+    const [marks, naMarks, naShare] = await Promise.all([
+      Data.get("quarterly_marks"),
+      Data.get("quarterly_nonaccrual_marks"),
+      Data.get("quarterly_nonaccrual_share"),
+    ]);
+
+    // The aggregate first, as one series: 43 lines would be unreadable, and the
+    // per-BDC detail belongs in the grids below.
+    const universe = [];
+    const byQuarter = new Map();
+    for (const row of marks) {
+      const bucket = byQuarter.get(row.quarter) || { fv: 0, principal: 0 };
+      bucket.fv += row.fair_value || 0;
+      bucket.principal += row.principal || 0;
+      byQuarter.set(row.quarter, bucket);
+    }
+    for (const [quarter, b] of [...byQuarter].sort()) {
+      if (b.principal > 0) {
+        universe.push({ quarter, weighted_mark: (b.fv / b.principal) * 100, fair_value: b.fv });
+      }
+    }
+
+    lineChart(document.getElementById("chart-mark-trend"), universe, {
+      x: "quarter", y: "weighted_mark", format: fmt.mark, label: "Weighted mark",
+      quarterLabel: true,
+      extra: (row) => `${fmt.money(row.fair_value)} of fair value`,
+    });
+
+    const grid = (target, rows, valueKey, label, format) =>
+      heatmap(document.getElementById(target), rows, {
+        row: "ticker", col: "quarter", value: valueKey, format, label, quarterLabel: true,
+      });
+
+    grid("chart-quarter-marks", marks, "weighted_mark",
+         "Weighted average mark by BDC and quarter", fmt.mark);
+    grid("chart-na-marks", naMarks, "weighted_mark",
+         "Non-accrual weighted mark by BDC and quarter", fmt.mark);
+    grid("chart-na-share", naShare, "nonaccrual_pct",
+         "Non-accrual share of market value by BDC and quarter", (v) => fmt.pct(v, 2));
+
+    const quarterColumns = (rows, key, format) => {
+      const quarters = [...new Set(rows.map((r) => r.quarter))].sort();
+      return [
+        { key: "ticker", label: "BDC", text: true },
+        { key: "bdc_name", label: "Name", text: true },
+        ...quarters.map((q) => ({ key: q, label: q, format })),
+      ];
+    };
+
+    const pivot = (rows, key) => {
+      const out = new Map();
+      for (const row of rows) {
+        const entry = out.get(row.ticker)
+          || { ticker: row.ticker, bdc_name: row.bdc_name };
+        entry[row.quarter] = row[key];
+        out.set(row.ticker, entry);
+      }
+      return [...out.values()];
+    };
+
+    table("table-quarter-marks", pivot(marks, "weighted_mark"),
+          quarterColumns(marks, "weighted_mark", fmt.mark), { sort: "ticker", dir: "asc" });
+    table("table-na-marks", pivot(naMarks, "weighted_mark"),
+          quarterColumns(naMarks, "weighted_mark", fmt.mark), { sort: "ticker", dir: "asc",
+          empty: "No BDC disclosed a non-accrual position in this window." });
+    table("table-na-share", pivot(naShare, "nonaccrual_pct"),
+          quarterColumns(naShare, "nonaccrual_pct", (v) => fmt.pct(v, 2)),
+          { sort: "ticker", dir: "asc" });
+  },
+
   async disagreements() {
     const rows = await Data.get("disagreements");
     table("table-disagreements", rows, [
@@ -387,8 +465,9 @@ const views = {
       { key: "issuer_name", label: "Borrower", text: true },
       { key: "investment_type", label: "Instrument", text: true, format: humanize },
       { key: "facility", label: "Facility", text: true, format: humanize },
-      { key: "industry", label: "Industry", text: true },
-      { key: "principal", label: "Par", format: fmt.money },
+      { key: "industry", label: "Sector", text: true },
+      { key: "country", label: "Country", text: true },
+      { key: "principal", label: "Principal", format: fmt.money },
       { key: "cost", label: "Cost", format: fmt.money },
       { key: "fair_value", label: "Fair value", format: fmt.money },
       { key: "mark", label: "Mark", render: (row) => markCell(row.mark) },

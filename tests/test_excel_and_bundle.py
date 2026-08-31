@@ -57,7 +57,11 @@ def test_workbook_has_every_sheet_and_row(conn, tmp_path):
     assert result["synthetic"] is False
 
     book = load_workbook(target)
-    assert book.sheetnames == ["Read me", "Marks", "BDC summary", "Disagreements"]
+    assert book.sheetnames == [
+        "Read me", "Marks", "BDC summary",
+        "Mark by quarter", "Non-accrual mark", "Non-accrual %",
+        "Disagreements",
+    ]
     assert book["Marks"].max_row == 5  # header + 4
 
 

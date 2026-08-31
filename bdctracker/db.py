@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS marks (
     maturity_date    TEXT,
     acquisition_date TEXT,
     industry         TEXT,
+    country          TEXT,
     fair_value_level TEXT,
     is_non_accrual   INTEGER,
     accession        TEXT,
@@ -105,6 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_marks_cik       ON marks(cik, period_end);
 CREATE INDEX IF NOT EXISTS idx_marks_issuer    ON marks(issuer_id, period_end);
 CREATE INDEX IF NOT EXISTS idx_marks_credit    ON marks(credit_id, period_end);
 CREATE INDEX IF NOT EXISTS idx_marks_industry  ON marks(industry);
+CREATE INDEX IF NOT EXISTS idx_marks_country   ON marks(country);
 CREATE INDEX IF NOT EXISTS idx_loans_cik       ON loans(cik);
 CREATE INDEX IF NOT EXISTS idx_loans_issuer    ON loans(issuer_id);
 
@@ -235,7 +237,7 @@ def load_positions(conn: sqlite3.Connection, positions: Iterable[Position]) -> d
                 _float(p.fair_value), _float(p.cost), _float(p.principal), _float(p.shares),
                 p.mark, None if unrealized is None else float(unrealized),
                 p.interest_rate, p.spread, p.reference_rate, p.pik_rate, p.pct_net_assets,
-                _iso(p.maturity_date), _iso(p.acquisition_date), p.industry, p.fair_value_level,
+                _iso(p.maturity_date), _iso(p.acquisition_date), p.industry, p.country, p.fair_value_level,
                 None if p.is_non_accrual is None else int(p.is_non_accrual),
                 p.accession, p.form, _iso(p.filed_date), p.source, ",".join(p.flags),
             )
@@ -246,9 +248,9 @@ def load_positions(conn: sqlite3.Connection, positions: Iterable[Position]) -> d
             loan_id, period_end, cik, issuer_id, credit_id,
             fair_value, cost, principal, shares, mark, unrealized,
             interest_rate, spread, reference_rate, pik_rate, pct_net_assets,
-            maturity_date, acquisition_date, industry, fair_value_level, is_non_accrual,
+            maturity_date, acquisition_date, industry, country, fair_value_level, is_non_accrual,
             accession, form, filed_date, source, flags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(loan_id, period_end) DO UPDATE SET
             fair_value=excluded.fair_value, cost=excluded.cost, principal=excluded.principal,
             shares=excluded.shares, mark=excluded.mark, unrealized=excluded.unrealized,
@@ -256,6 +258,7 @@ def load_positions(conn: sqlite3.Connection, positions: Iterable[Position]) -> d
             reference_rate=excluded.reference_rate, pik_rate=excluded.pik_rate,
             pct_net_assets=excluded.pct_net_assets, maturity_date=excluded.maturity_date,
             acquisition_date=excluded.acquisition_date, industry=excluded.industry,
+            country=COALESCE(excluded.country, marks.country),
             fair_value_level=excluded.fair_value_level,
             is_non_accrual=COALESCE(excluded.is_non_accrual, marks.is_non_accrual),
             accession=excluded.accession, form=excluded.form, filed_date=excluded.filed_date,

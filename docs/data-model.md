@@ -84,7 +84,16 @@ not erase a status an earlier one established.
 | Read me | Provenance, coverage, what a mark is, the flag legend, how to verify a row |
 | Marks | The fact table — one row per (loan, quarter), 36 columns |
 | BDC summary | Per-BDC totals for one quarter, computed with live `SUMIFS` |
+| Mark by quarter | Weighted average mark per BDC per calendar quarter, 2024 onward |
+| Non-accrual mark | The same, over the non-accrual book only |
+| Non-accrual % | Non-accrual fair value as a share of market value |
 | Disagreements | Credits held by two or more BDCs, ranked by mark spread |
+
+The three quarterly sheets are grids — one row per BDC, one column per quarter —
+because a trend is read along a row, and a long table would force a re-sort to
+follow one lender. Quarters are *calendar* quarters: BDCs keep different fiscal
+calendars (Golub reports to September, most to December), so a February period
+end and a March one are the same quarter and belong in the same column.
 
 Three conventions differ from the database, because a spreadsheet is read by
 people rather than queried:

@@ -41,7 +41,8 @@ MARK_COLUMNS: list[tuple[str, str | None, str | None, int]] = [
     ("Instrument",            "investment_type",   None,          18),
     ("Lien",                  "lien",              None,          12),
     ("Facility",              "facility",          None,          12),
-    ("Industry",              "industry",          None,          26),
+    ("Sector",                "industry",          None,          26),
+    ("Country",               "country",           None,          16),
     ("Ccy",                   "currency",          None,          6),
     ("Principal",             "principal",         MONEY,         16),
     ("Cost",                  "cost",              MONEY,         16),
@@ -86,7 +87,7 @@ SELECT
     m.principal, m.cost, m.fair_value, m.shares,
     CASE WHEN m.principal > 0 THEN m.principal ELSE m.cost END AS mark_basis,
     m.interest_rate, m.spread, m.reference_rate, m.pik_rate, m.pct_net_assets,
-    m.maturity_date, m.acquisition_date, m.fair_value_level,
+    m.maturity_date, m.acquisition_date, m.country, m.fair_value_level,
     CASE WHEN m.is_non_accrual = 1 THEN 'Yes'
          WHEN m.is_non_accrual = 0 THEN 'No'
          ELSE 'Not disclosed' END AS non_accrual_text,
@@ -309,6 +310,38 @@ def _write_disagreements(workbook: Workbook, conn: sqlite3.Connection, period: s
                 cell.number_format = number_format
 
 
+def _write_quarter_grid(workbook: Workbook, sheet_name: str, rows: list[dict],
+                        value_key: str, value_format: str, note: str) -> None:
+    """One row per BDC, one column per quarter — the shape a trend reads best in.
+
+    A long table forces the reader to re-sort to follow one lender through time;
+    a grid puts each BDC's history on a single line.
+    """
+    sheet = workbook.create_sheet(sheet_name)
+    quarters = sorted({r["quarter"] for r in rows})
+    names: dict[str, str] = {}
+    for row in rows:
+        names.setdefault(row["ticker"], row["bdc_name"])
+
+    columns = [("BDC", None, None, 8), ("Name", None, None, 30)]
+    columns += [(q, None, value_format, 11) for q in quarters]
+    _style_header(sheet, columns)
+
+    lookup = {(r["ticker"], r["quarter"]): r.get(value_key) for r in rows}
+    for index, (ticker, name) in enumerate(sorted(names.items()), start=2):
+        sheet.cell(row=index, column=1, value=ticker).font = Font(name=FONT)
+        sheet.cell(row=index, column=2, value=name).font = Font(name=FONT)
+        for offset, quarter in enumerate(quarters):
+            cell = sheet.cell(row=index, column=3 + offset,
+                              value=lookup.get((ticker, quarter)))
+            cell.font = Font(name=FONT)
+            cell.number_format = value_format
+
+    sheet.freeze_panes = "C2"
+    footnote = sheet.cell(row=len(names) + 3, column=1, value=note)
+    footnote.font = Font(name=FONT, italic=True, size=9)
+
+
 def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
                   sources: list[str]) -> None:
     sheet = workbook.create_sheet("Read me", 0)
@@ -413,6 +446,26 @@ def export_workbook(conn: sqlite3.Connection, path: str | Path,
     workbook.remove(workbook.active)
     marks_rows, blocks = _write_marks(workbook, conn)
     _write_summary(workbook, conn, blocks[period], period)
+
+    _write_quarter_grid(
+        workbook, "Mark by quarter",
+        analytics.quarterly_bdc_marks(conn), "weighted_mark", PRICE,
+        "Weighted average mark = sum of fair value / sum of principal, debt positions only. "
+        "Quarters are calendar quarters, so filers on other fiscal calendars line up.",
+    )
+    _write_quarter_grid(
+        workbook, "Non-accrual mark",
+        analytics.quarterly_nonaccrual_marks(conn), "weighted_mark", PRICE,
+        "Weighted average mark of the non-accrual book only. Blank where a BDC disclosed "
+        "no non-accruals that quarter — which is not the same as having none.",
+    )
+    _write_quarter_grid(
+        workbook, "Non-accrual %",
+        analytics.quarterly_nonaccrual_share(conn), "nonaccrual_pct", PCT1,
+        "Non-accrual fair value as a share of total fair value (market value). Blank where "
+        "the filing disclosed no non-accrual status at all.",
+    )
+
     _write_disagreements(workbook, conn, period)
     _write_readme(workbook, conn, period, sources)
     workbook.save(path)

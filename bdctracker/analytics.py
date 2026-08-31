@@ -357,6 +357,127 @@ def shared_credits(conn: sqlite3.Connection, period: str | None = None,
 
 
 # ---------------------------------------------------------------------------
+# Quarterly series, one row per BDC per quarter
+# ---------------------------------------------------------------------------
+
+#: BDCs keep different fiscal calendars — Golub reports to September, most to
+#: December — so a February period end and a March one are the same quarter.
+#: Aligning on the calendar quarter is what makes them comparable side by side.
+_QUARTER = ("substr(period_end, 1, 4) || 'Q' || "
+            "CAST((CAST(substr(period_end, 6, 2) AS INTEGER) + 2) / 3 AS INTEGER)")
+
+#: One period end per BDC per quarter: the latest, should a filer report twice.
+_LATEST_PER_QUARTER = f"""
+WITH labelled AS (
+    SELECT *, {_QUARTER} AS quarter FROM v_marks WHERE period_end >= :since
+), chosen AS (
+    SELECT cik, quarter, MAX(period_end) AS period_end
+    FROM labelled GROUP BY cik, quarter
+), scoped AS (
+    SELECT l.* FROM labelled l
+    JOIN chosen c ON c.cik = l.cik AND c.quarter = l.quarter
+                 AND c.period_end = l.period_end
+)
+"""
+
+DEFAULT_SINCE = "2024-01-01"
+
+
+def quarterly_bdc_marks(conn: sqlite3.Connection, since: str = DEFAULT_SINCE) -> list[dict]:
+    """Weighted average mark per BDC per quarter.
+
+    Weighted by principal — the sum of fair value over the sum of principal —
+    so a large position moves the number in proportion to its size, which a
+    simple average of marks would not do.
+    """
+    return _rows(
+        conn,
+        _LATEST_PER_QUARTER + """
+        SELECT quarter, ticker, bdc_name, MIN(period_end) AS period_end,
+               100.0 * SUM(fair_value) / NULLIF(SUM(principal), 0) AS weighted_mark,
+               SUM(fair_value) AS fair_value,
+               SUM(principal)  AS principal,
+               COUNT(*)        AS positions
+        FROM scoped
+        WHERE is_debt = 1 AND principal > 0 AND fair_value IS NOT NULL
+        GROUP BY quarter, ticker, bdc_name
+        ORDER BY quarter, ticker
+        """,
+        {"since": since},
+    )
+
+
+def quarterly_nonaccrual_marks(conn: sqlite3.Connection, since: str = DEFAULT_SINCE) -> list[dict]:
+    """Weighted average mark of the non-accrual book, per BDC per quarter.
+
+    How hard a lender has written down the loans it has stopped accruing —
+    distinct from how much of the book is on non-accrual.
+    """
+    return _rows(
+        conn,
+        _LATEST_PER_QUARTER + """
+        SELECT quarter, ticker, bdc_name, MIN(period_end) AS period_end,
+               100.0 * SUM(fair_value) / NULLIF(SUM(principal), 0) AS weighted_mark,
+               SUM(fair_value) AS fair_value,
+               SUM(principal)  AS principal,
+               COUNT(*)        AS positions
+        FROM scoped
+        WHERE is_non_accrual = 1 AND principal > 0 AND fair_value IS NOT NULL
+        GROUP BY quarter, ticker, bdc_name
+        ORDER BY quarter, ticker
+        """,
+        {"since": since},
+    )
+
+
+def quarterly_nonaccrual_share(conn: sqlite3.Connection,
+                               since: str = DEFAULT_SINCE) -> list[dict]:
+    """Non-accrual share of each BDC's portfolio by market value, per quarter.
+
+    Market value means fair value: the share of what the book is currently
+    worth that sits on non-accrual, not the share of what it cost.
+    """
+    return _rows(
+        conn,
+        _LATEST_PER_QUARTER + """
+        SELECT quarter, ticker, bdc_name, MIN(period_end) AS period_end,
+               SUM(fair_value) AS total_fair_value,
+               COALESCE(SUM(CASE WHEN is_non_accrual = 1 THEN fair_value END), 0)
+                   AS nonaccrual_fair_value,
+               CASE WHEN SUM(is_non_accrual IS NOT NULL) = 0 THEN NULL
+                    ELSE 100.0
+                         * COALESCE(SUM(CASE WHEN is_non_accrual = 1 THEN fair_value END), 0)
+                         / NULLIF(SUM(fair_value), 0) END AS nonaccrual_pct,
+               SUM(CASE WHEN is_non_accrual = 1 THEN 1 ELSE 0 END) AS nonaccrual_positions,
+               SUM(is_non_accrual IS NOT NULL) AS coverage,
+               COUNT(*) AS positions
+        FROM scoped
+        GROUP BY quarter, ticker, bdc_name
+        ORDER BY quarter, ticker
+        """,
+        {"since": since},
+    )
+
+
+def country_exposure(conn: sqlite3.Connection, period: str | None = None) -> list[dict]:
+    """Fair value and weighted mark by country of the borrower."""
+    period = period or latest_period(conn)
+    if period is None:
+        return []
+    return _rows(
+        conn,
+        """
+        SELECT country, SUM(fair_value) AS fair_value, COUNT(*) AS positions,
+               100.0 * SUM(CASE WHEN is_debt THEN fair_value END)
+                     / NULLIF(SUM(CASE WHEN is_debt THEN principal END), 0) AS weighted_mark
+        FROM v_marks WHERE period_end = ? AND country IS NOT NULL
+        GROUP BY country ORDER BY fair_value DESC
+        """,
+        (period,),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Drill-downs
 # ---------------------------------------------------------------------------
 
@@ -365,7 +486,7 @@ def bdc_positions(conn: sqlite3.Connection, ticker: str, period: str | None = No
     return _rows(
         conn,
         """
-        SELECT loan_id, issuer_name, investment_type, lien, facility, industry, currency,
+        SELECT loan_id, issuer_name, investment_type, lien, facility, industry, country, currency,
                fair_value, cost, principal, mark, unrealized, interest_rate, spread,
                reference_rate, pik_rate, maturity_date, is_non_accrual, fair_value_level, flags
         FROM v_marks WHERE ticker = ? AND period_end = ?

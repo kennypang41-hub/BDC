@@ -25,6 +25,7 @@
   <button role="tab" data-view="nonaccruals">Non-accruals</button>
   <button role="tab" data-view="marks">Marks</button>
   <button role="tab" data-view="maturities">Maturities</button>
+  <button role="tab" data-view="trends">Trends</button>
   <button role="tab" data-view="disagreements">Disagreements</button>
   <button role="tab" data-view="positions">Positions</button>
 </nav>
@@ -90,6 +91,11 @@
       <details class="tableview"><summary>Table view</summary><div class="tablewrap" id="table-sectors"></div></details>
     </figure>
     <figure class="card">
+      <figcaption>Exposure by country</figcaption>
+      <p class="desc">Where the borrowers are, by fair value.</p>
+      <div class="tablewrap" id="table-countries"></div>
+    </figure>
+    <figure class="card">
       <figcaption>Furthest below cost</figcaption>
       <p class="desc">Positions whose fair value sits furthest below what the BDC paid.</p>
       <div class="tablewrap" id="table-markdowns"></div>
@@ -106,6 +112,35 @@
       </div>
       <div id="chart-maturity"></div>
       <details class="tableview"><summary>Table view</summary><div class="tablewrap" id="table-maturity"></div></details>
+    </figure>
+  </section>
+
+  <section id="view-trends" hidden>
+    <figure class="card">
+      <figcaption>Weighted average mark, whole universe</figcaption>
+      <p class="desc">Fair value over principal across every covered BDC, quarter by quarter. The line is the aggregate; the grid below it is where the movement comes from.</p>
+      <div id="chart-mark-trend"></div>
+    </figure>
+
+    <figure class="card">
+      <figcaption>Weighted average mark by BDC</figcaption>
+      <p class="desc">Each BDC's debt book, weighted by principal. Darker is a higher mark — read a row left to right to follow one lender, and a column down to compare them at a point in time.</p>
+      <div id="chart-quarter-marks"></div>
+      <details class="tableview"><summary>Table view</summary><div class="tablewrap" id="table-quarter-marks"></div></details>
+    </figure>
+
+    <figure class="card">
+      <figcaption>Weighted average mark of the non-accrual book</figcaption>
+      <p class="desc">How hard each lender has written down the loans it has stopped accruing — a different question from how many it has. Blank means the filing disclosed no non-accruals that quarter, which is not the same as having none.</p>
+      <div id="chart-na-marks"></div>
+      <details class="tableview"><summary>Table view</summary><div class="tablewrap" id="table-na-marks"></div></details>
+    </figure>
+
+    <figure class="card">
+      <figcaption>Non-accrual share of market value by BDC</figcaption>
+      <p class="desc">Non-accrual fair value as a percentage of total fair value. Darker is more of the book on non-accrual.</p>
+      <div id="chart-na-share"></div>
+      <div class="tablewrap" id="table-na-share"></div>
     </figure>
   </section>
 

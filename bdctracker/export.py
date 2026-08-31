@@ -29,6 +29,10 @@ BUNDLE: dict[str, Callable[[sqlite3.Connection, str | None], object]] = {
     "deteriorating": lambda conn, period: analytics.deteriorating(conn, period, limit=200),
     "disagreements": lambda conn, period: analytics.disagreements(conn, period, limit=300),
     "shared_credits": lambda conn, period: analytics.shared_credits(conn, period),
+    "quarterly_marks": lambda conn, period: analytics.quarterly_bdc_marks(conn),
+    "quarterly_nonaccrual_marks": lambda conn, period: analytics.quarterly_nonaccrual_marks(conn),
+    "quarterly_nonaccrual_share": lambda conn, period: analytics.quarterly_nonaccrual_share(conn),
+    "country_exposure": lambda conn, period: analytics.country_exposure(conn, period),
 }
 
 

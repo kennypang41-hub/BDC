@@ -86,7 +86,9 @@ function niceTicks(min, max, count = 5) {
 
 /** Line chart over quarters. One series, so no legend — the caption names it. */
 export function lineChart(container, rows, options) {
-  const { x, y, format = fmt.pct, label = "" } = options;
+  const { x, y, format = fmt.pct, label = "", quarterLabel = false } = options;
+  // Some series carry an ISO period end, others an already-formatted quarter.
+  const tick = (value) => (quarterLabel ? String(value) : fmt.quarter(value));
   const width = 720;
   const height = 240;
   const margin = { top: 12, right: 16, bottom: 28, left: 52 };
@@ -125,7 +127,7 @@ export function lineChart(container, rows, options) {
     y1: height - margin.bottom, y2: height - margin.bottom }));
   points.forEach((row, i) => {
     axis.append(el("text", { x: sx(i), y: height - margin.bottom + 16, "text-anchor": "middle" },
-      [document.createTextNode(fmt.quarter(row[x]))]));
+      [document.createTextNode(tick(row[x]))]));
   });
   svg.append(axis);
 
@@ -156,7 +158,7 @@ export function lineChart(container, rows, options) {
     marker.setAttribute("cx", sx(index));
     marker.setAttribute("cy", sy(row[y]));
     marker.setAttribute("opacity", 1);
-    showTip(event, `<b>${fmt.quarter(row[x])}</b><br>${label}: <b>${format(row[y])}</b>` +
+    showTip(event, `<b>${tick(row[x])}</b><br>${label}: <b>${format(row[y])}</b>` +
       (options.extra ? `<br>${options.extra(row)}` : ""));
   });
   hit.addEventListener("pointerleave", () => {
@@ -242,11 +244,17 @@ export function barChart(container, rows, options) {
 
 /** Sequential heatmap: rows x quarters, one hue light to dark. */
 export function heatmap(container, rows, options) {
-  const { row: rowKey, col: colKey, value: valueKey, format = fmt.mark, label = "" } = options;
+  const {
+    row: rowKey, col: colKey, value: valueKey,
+    format = fmt.mark, label = "", quarterLabel = false,
+  } = options;
+  const tick = (value) => (quarterLabel ? String(value) : fmt.quarter(value));
+  // A 34px column cannot hold "2024Q1"; the century is the redundant half.
+  const headerTick = (value) => tick(value).replace(/^(19|20)/, "");
   container.replaceChildren();
   if (!rows.length) {
     container.append(Object.assign(document.createElement("p"),
-      { className: "empty", textContent: "No sector history yet." }));
+      { className: "empty", textContent: "Nothing to chart yet." }));
     return;
   }
 
@@ -259,7 +267,10 @@ export function heatmap(container, rows, options) {
   const steps = ["var(--seq-100)", "var(--seq-250)", "var(--seq-400)", "var(--seq-550)", "var(--seq-700)"];
 
   const cell = 34;
-  const left = 200;
+  // Wide enough for an industry name, but a grid of tickers should not carry
+  // two hundred pixels of empty gutter.
+  const longest = Math.max(...rowNames.map((n) => String(n).length));
+  const left = Math.min(200, Math.max(56, longest * 7 + 16));
   const top = 26;
   const width = left + colNames.length * cell + 12;
   const height = top + rowNames.length * cell + 8;
@@ -268,7 +279,7 @@ export function heatmap(container, rows, options) {
 
   colNames.forEach((col, i) => {
     svg.append(el("text", { x: left + i * cell + cell / 2, y: top - 10, "text-anchor": "middle" },
-      [document.createTextNode(fmt.quarter(col))]));
+      [document.createTextNode(headerTick(col))]));
   });
 
   rowNames.forEach((name, r) => {
@@ -286,8 +297,10 @@ export function heatmap(container, rows, options) {
       });
       if (record) {
         rect.addEventListener("pointermove", (event) => showTip(event,
-          `<b>${name}</b> · ${fmt.quarter(col)}<br>Weighted mark: <b>${format(value)}</b>` +
-          `<br>${fmt.money(record.fair_value)} across ${fmt.num(record.positions)} positions`));
+          `<b>${name}</b> · ${tick(col)}<br>${label.split(" by ")[0]}: <b>${format(value)}</b>` +
+          (record.fair_value != null
+            ? `<br>${fmt.money(record.fair_value)} across ${fmt.num(record.positions)} positions`
+            : "")));
         rect.addEventListener("pointerleave", hideTip);
       }
       svg.append(rect);
