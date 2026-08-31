@@ -205,6 +205,14 @@ total_fair_value  $202,414,257,256
 The bulk data sets carried it in 6 minutes; the filing top-up added the newest
 quarter in 9 more.
 
+**Known gap: sector and country are sparse.** Filers tag industry as a
+presentation grouping inside the schedule rather than as a dimension on the
+fair-value fact, so it reaches ~2% of positions, and geography under 1%. Reading
+either properly means walking the presentation linkbase to inherit each
+position's grouping header, or parsing the rendered schedule — neither is a
+dimension lookup. Both columns are left blank rather than inferred; maturity,
+which the label usually prints, reaches ~25% via a text fallback.
+
 **Known gap: identity is under-collapsing.** 40,934 loans and 26,717 borrowers
 is roughly three times what a mature tracker of this universe reports (~11,400
 loans). Fair value and the marks themselves look right — $202bn is the correct

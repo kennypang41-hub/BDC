@@ -62,11 +62,14 @@ _COUNTRY_ALIASES = {
     "KY": "Cayman Islands", "CAYMAN ISLANDS": "Cayman Islands",
 }
 
-#: Currencies imply a country only when the filer said nothing else.
-_CURRENCY_COUNTRY = {
-    "GBP": "United Kingdom", "CAD": "Canada", "AUD": "Australia",
-    "SEK": "Sweden", "DKK": "Denmark", "NOK": "Norway", "CHF": "Switzerland",
-}
+#: Members that arrive on a geography-shaped axis but describe affiliation.
+_NOT_A_PLACE = re.compile(
+    r"affiliat|control|majority[\s-]*owned|non[\s-]*controlled|portfolio compan", re.I
+)
+
+#: XBRL standard members arrive as QNames: http://fasb.org/srt/2024#NorthAmerica
+_QNAME = re.compile(r"^https?://\S+?#(\w+)$")
+_CAMEL = re.compile(r"(?<=[a-z])(?=[A-Z])")
 
 
 def maturity_from_label(*texts: str | None) -> date | None:
@@ -92,16 +95,27 @@ def maturity_from_label(*texts: str | None) -> date | None:
     return None
 
 
-def canonical_country(value: str | None, currency: str | None = None) -> str | None:
-    """Normalise a geography member; fall back to what the currency implies."""
-    if value:
-        text = re.sub(r"\[member\]|member$", "", str(value), flags=re.I).strip(" .,")
-        text = _WS.sub(" ", text) if (_WS := re.compile(r"\s+")) else text
-        if text:
-            return _COUNTRY_ALIASES.get(text.upper(), text)
-    if currency and currency != "USD":
-        return _CURRENCY_COUNTRY.get(currency)
-    return "United States" if currency == "USD" else None
+def canonical_country(value: str | None) -> str | None:
+    """Normalise a tagged geography member, or return nothing.
+
+    Deliberately never inferred. A dollar-denominated loan is not evidence of a
+    US borrower, and filling the column from currency would report 99% coverage
+    for a field the filings tag on well under 1% of positions — which reads as
+    data rather than as a guess.
+    """
+    if not value:
+        return None
+
+    text = str(value).strip()
+    qname = _QNAME.match(text)
+    if qname:
+        # NorthAmerica -> North America
+        text = _CAMEL.sub(" ", qname.group(1))
+    text = re.sub(r"\[member\]|member$", "", text, flags=re.I)
+    text = re.sub(r"\s+", " ", text).strip(" .,")
+    if not text or _NOT_A_PLACE.search(text):
+        return None
+    return _COUNTRY_ALIASES.get(text.upper(), text)
 
 _DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y%m%d", "%d-%b-%Y", "%b %d, %Y")
 
@@ -230,7 +244,7 @@ def finalize(position: Position) -> Position:
         position.is_non_accrual = detect_non_accrual(position.tranche_text, position.identifier)
     if position.maturity_date is None:
         position.maturity_date = maturity_from_label(position.identifier, position.tranche_text)
-    position.country = canonical_country(position.country, position.currency)
+    position.country = canonical_country(position.country)
 
     position.issuer_id = identity.issuer_key(position.issuer_name)
     position.credit_id = identity.credit_key(position.issuer_name, position.investment_type)

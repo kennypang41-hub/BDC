@@ -399,6 +399,15 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
         "100 means the BDC carries the loan at par; below 100 means it has written the "
         "position down. Equity has no principal, so it is marked against cost instead — "
         "the 'Mark basis (fallback)' column holds that stand-in denominator.")
+    put("Sector and country",
+        "Both are sparse. Filers tag industry as a presentation grouping in the schedule "
+        "rather than as a dimension on the fair-value fact, so it reaches roughly 2% of "
+        "positions; geography is tagged on well under 1%. Blank means the filing did not "
+        "tag it — neither field is ever inferred.")
+    put("Maturity",
+        "Taken from the tagged maturity date, or read from the position label where the "
+        "filer printed one ('due 6/30/2029') without tagging it. About a quarter of "
+        "positions carry one either way.")
     put("Principal",
         "Principal outstanding as the filing reports it. Blank where the filer did not "
         "tag it, in which case the mark falls back to cost and the row carries the "

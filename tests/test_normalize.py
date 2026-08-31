@@ -255,3 +255,36 @@ def test_a_zero_principal_falls_through_to_cost():
 
 def test_no_denominator_at_all_yields_no_mark():
     assert make(fair_value=Decimal("100")).mark is None
+
+
+# ---------------------------------------------------------------------------
+# Country
+# ---------------------------------------------------------------------------
+
+def test_country_normalises_the_forms_filers_tag():
+    assert normalize.canonical_country("UNITED STATES [Member]") == "United States"
+    assert normalize.canonical_country("http://fasb.org/srt/2024#NorthAmerica") == "North America"
+    assert normalize.canonical_country("UK") == "United Kingdom"
+    assert normalize.canonical_country("Canada") == "Canada"
+
+
+def test_country_rejects_members_that_describe_affiliation_not_place():
+    """Some filers hang affiliation off a geography-shaped axis."""
+    assert normalize.canonical_country("Majority Owned Control Investments") is None
+    assert normalize.canonical_country("Non-Controlled/Non-Affiliated") is None
+
+
+def test_country_is_never_inferred_from_currency():
+    """A dollar loan is not evidence of a US borrower."""
+    position = make(identifier="Acme Corp, First Lien Term Loan", fair_value=Decimal("100"))
+    assert position.currency == "USD"
+    assert position.country is None
+
+
+def test_country_survives_finalize_when_the_filing_tagged_it():
+    position = normalize.finalize(
+        Position(cik=1, period_end=date(2025, 12, 31),
+                 identifier="Acme GmbH, First Lien Term Loan, EURIBOR + 6.00%",
+                 country="Germany [Member]")
+    )
+    assert position.country == "Germany"
