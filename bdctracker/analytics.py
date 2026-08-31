@@ -8,6 +8,12 @@ from __future__ import annotations
 import sqlite3
 from typing import Sequence
 
+#: The denominator every mark divides by: principal where the filing reports
+#: one, cost otherwise — the same precedence as Position.mark_basis. Insisting
+#: on principal alone leaves whole quarters blank, because the bulk data sets
+#: carry it on barely half of positions.
+BASIS = "COALESCE(NULLIF(principal, 0), cost)"
+
 #: A debt position below this mark is treated as stressed.
 STRESS_MARK = 90.0
 
@@ -58,7 +64,9 @@ SELECT
     SUM(c.cost)                                                AS cost,
     SUM(CASE WHEN c.is_debt THEN c.principal END)              AS principal,
     100.0 * SUM(CASE WHEN c.is_debt THEN c.fair_value END)
-          / NULLIF(SUM(CASE WHEN c.is_debt THEN c.principal END), 0)  AS portfolio_mark,
+          / NULLIF(SUM(CASE WHEN c.is_debt
+                           THEN COALESCE(NULLIF(c.principal, 0), c.cost) END), 0)
+                                                                      AS portfolio_mark,
     100.0 * SUM(c.fair_value) / NULLIF(SUM(c.cost), 0)          AS fv_over_cost,
     -- Null, not zero, when the filing never disclosed non-accrual status:
     -- "we could not tell" and "nothing is on non-accrual" are different claims.
@@ -220,11 +228,11 @@ def sector_marks(conn: sqlite3.Connection, quarters: int = 8) -> list[dict]:
         conn,
         f"""
         SELECT industry, period_end,
-               100.0 * SUM(fair_value) / NULLIF(SUM(principal), 0) AS weighted_mark,
+               100.0 * SUM(fair_value) / NULLIF(SUM(COALESCE(NULLIF(principal, 0), cost)), 0) AS weighted_mark,
                SUM(fair_value) AS fair_value, COUNT(*) AS positions
         FROM v_marks
         WHERE period_end IN ({placeholders}) AND is_debt = 1 AND industry IS NOT NULL
-              AND principal > 0
+              AND COALESCE(NULLIF(principal, 0), cost) > 0
         GROUP BY industry, period_end
         HAVING positions >= 5
         ORDER BY industry, period_end
@@ -394,12 +402,12 @@ def quarterly_bdc_marks(conn: sqlite3.Connection, since: str = DEFAULT_SINCE) ->
         conn,
         _LATEST_PER_QUARTER + """
         SELECT quarter, ticker, bdc_name, MIN(period_end) AS period_end,
-               100.0 * SUM(fair_value) / NULLIF(SUM(principal), 0) AS weighted_mark,
+               100.0 * SUM(fair_value) / NULLIF(SUM(COALESCE(NULLIF(principal, 0), cost)), 0) AS weighted_mark,
                SUM(fair_value) AS fair_value,
-               SUM(principal)  AS principal,
+               SUM(COALESCE(NULLIF(principal, 0), cost))        AS principal,
                COUNT(*)        AS positions
         FROM scoped
-        WHERE is_debt = 1 AND principal > 0 AND fair_value IS NOT NULL
+        WHERE is_debt = 1 AND COALESCE(NULLIF(principal, 0), cost) > 0 AND fair_value IS NOT NULL
         GROUP BY quarter, ticker, bdc_name
         ORDER BY quarter, ticker
         """,
@@ -417,12 +425,12 @@ def quarterly_nonaccrual_marks(conn: sqlite3.Connection, since: str = DEFAULT_SI
         conn,
         _LATEST_PER_QUARTER + """
         SELECT quarter, ticker, bdc_name, MIN(period_end) AS period_end,
-               100.0 * SUM(fair_value) / NULLIF(SUM(principal), 0) AS weighted_mark,
+               100.0 * SUM(fair_value) / NULLIF(SUM(COALESCE(NULLIF(principal, 0), cost)), 0) AS weighted_mark,
                SUM(fair_value) AS fair_value,
-               SUM(principal)  AS principal,
+               SUM(COALESCE(NULLIF(principal, 0), cost))        AS principal,
                COUNT(*)        AS positions
         FROM scoped
-        WHERE is_non_accrual = 1 AND principal > 0 AND fair_value IS NOT NULL
+        WHERE is_non_accrual = 1 AND COALESCE(NULLIF(principal, 0), cost) > 0 AND fair_value IS NOT NULL
         GROUP BY quarter, ticker, bdc_name
         ORDER BY quarter, ticker
         """,

@@ -217,3 +217,27 @@ def test_quarterly_nonaccrual_share_is_null_where_nothing_was_disclosed(conn):
             if r["quarter"] == "2025Q4"}
     assert rows["TSLX"]["coverage"] == 0
     assert rows["TSLX"]["nonaccrual_pct"] is None
+
+
+def test_quarterly_marks_fall_back_to_cost_where_no_principal_was_reported():
+    """The bulk data sets carry principal on barely half of positions.
+
+    Insisting on principal left whole quarters blank in the grids, even though
+    the row-level mark had a denominator all along.
+    """
+    connection = db.connect(":memory:")
+    db.init_schema(connection)
+    db.upsert_bdcs(connection, [ARCC])
+    db.load_positions(connection, [
+        normalize.finalize(Position(
+            cik=ARCC.cik, period_end=date(2024, 3, 31),
+            identifier="Acme Corp, First Lien Term Loan",
+            fair_value=Decimal("900"), cost=Decimal("1000"),   # no principal
+        ))
+    ])
+    connection.commit()
+
+    rows = analytics.quarterly_bdc_marks(connection, since="2024-01-01")
+    assert [r["quarter"] for r in rows] == ["2024Q1"]
+    assert rows[0]["weighted_mark"] == pytest.approx(90.0)
+    connection.close()
