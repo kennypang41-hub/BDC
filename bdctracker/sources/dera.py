@@ -162,23 +162,41 @@ def read_quarter(zip_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     return soi, subs
 
 
-#: Filers define their own axes, so any column whose label is *about* industry
-#: or geography feeds those fields even when its name is not in COLUMN_MAP.
+#: DERA labels its columns from the taxonomy, and the wording moves between
+#: releases — "Investment Owned, Fair Value" one quarter, "Investment Owned, at
+#: Fair Value" the next. Matching an exact string means a rename silently empties
+#: the most important column in the dataset, so match on subject instead.
 _SUBJECT_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
+    (re.compile(r"fair\s*value", re.I), "fair_value"),
+    (re.compile(r"\bcost\b", re.I), "cost"),
+    (re.compile(r"principal", re.I), "principal"),
     (re.compile(r"industr|sector", re.I), "industry"),
     (re.compile(r"geograph|countr|region|jurisdiction", re.I), "country"),
 )
 
+#: Columns that name a value without carrying one — a hierarchy level is not a
+#: fair value. Applied to the money fields only: an axis column is exactly what
+#: the industry and geography fields are looking for.
+_NOT_A_VALUE = re.compile(r"level|hierarchy|technique|approach|method|axis$", re.I)
+_MONEY_FIELDS = frozenset({"fair_value", "cost", "principal"})
+
 
 def _subject_columns(columns) -> dict[str, str]:
-    """Map unrecognised axis columns onto the field they describe."""
+    """Map columns COLUMN_MAP missed onto the field they describe."""
+    known = set(COLUMN_MAP.values())
+    present = {c for c in columns if c in known}
     out: dict[str, str] = {}
     for column in columns:
-        if column in COLUMN_MAP.values():
+        name = str(column)
+        if column in known:
             continue
         for pattern, field in _SUBJECT_PATTERNS:
-            if pattern.search(str(column)):
-                out.setdefault(field, str(column))
+            if field in present:
+                continue  # the taxonomy-named column already supplies it
+            if field in _MONEY_FIELDS and _NOT_A_VALUE.search(name):
+                continue
+            if pattern.search(name):
+                out.setdefault(field, name)
                 break
     return out
 
@@ -195,6 +213,12 @@ def tidy(soi: pd.DataFrame) -> pd.DataFrame:
                 lambda v: v.replace(_MEMBER_SUFFIX, "").strip() if isinstance(v, str) else v
             )
     return frame
+
+
+def _alt(extra: dict[str, str], field: str) -> tuple[str, ...]:
+    """The fallback column name found for a field, if any."""
+    found = extra.get(field)
+    return (found,) if found else ()
 
 
 def _first(row: pd.Series, *names: str):
@@ -247,13 +271,13 @@ def to_positions(frame: pd.DataFrame, ciks: Iterable[int] | None = None) -> list
             identifier=str(identifier),
             issuer_name=str(issuer) if issuer else "",
             tranche_text=descriptor or None,
-            industry=_first(series, "industry", *(
-                [extra["industry"]] if "industry" in extra else [])),
-            country=_first(series, "country", *(
-                [extra["country"]] if "country" in extra else [])),
-            fair_value=normalize.to_decimal(_first(series, "fair_value")),
-            cost=normalize.to_decimal(_first(series, "cost")),
-            principal=normalize.to_decimal(_first(series, "principal")),
+            industry=_first(series, "industry", *_alt(extra, "industry")),
+            country=_first(series, "country", *_alt(extra, "country")),
+            fair_value=normalize.to_decimal(
+                _first(series, "fair_value", *_alt(extra, "fair_value"))),
+            cost=normalize.to_decimal(_first(series, "cost", *_alt(extra, "cost"))),
+            principal=normalize.to_decimal(
+                _first(series, "principal", *_alt(extra, "principal"))),
             shares=normalize.to_decimal(_first(series, "shares")),
             interest_rate=normalize.to_rate_pct(_first(series, "interest_rate")),
             spread=normalize.to_rate_pct(_first(series, "spread")),

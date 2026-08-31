@@ -237,3 +237,61 @@ def test_xbrl_and_dera_agree_on_the_loan_key(dera_zip: Path, xbrl_doc):
         if p.period_end == date(2025, 6, 30)
     )
     assert from_dera.loan_id == from_xbrl.loan_id
+
+
+# ---------------------------------------------------------------------------
+# Column labels that moved
+# ---------------------------------------------------------------------------
+
+RENAMED_COLUMNS = [
+    "adsh", "cik", "name", "form", "filed", "ddate",
+    "Investment, Identifier Axis", "Investment, Issuer Name Axis",
+    # The taxonomy wording drifts between DERA releases: an "at" appears, and
+    # every exact-match mapping for that column silently yields nothing.
+    "Investment Owned, at Fair Value", "Investment Owned, at Cost",
+    "Investment Owned, Balance, Principal Amount",
+    "Investment, Geographical Area Axis",
+]
+
+RENAMED_ROW = [
+    "0001-24-000001", 1287750, "ARES CAPITAL CORP", "10-Q", "2025-08-05", 20250630,
+    "Acme Holdings, LLC, First Lien Senior Secured Loan",
+    "Acme Holdings, LLC", 9_800_000, 9_950_000, 10_000_000, "Canada [Member]",
+]
+
+
+@pytest.fixture
+def renamed_zip(tmp_path: Path) -> Path:
+    soi = "\n".join([
+        "\t".join(RENAMED_COLUMNS),
+        "\t".join("" if v is None else str(v) for v in RENAMED_ROW),
+    ])
+    target = tmp_path / "2025q3_bdc.zip"
+    with zipfile.ZipFile(target, "w") as archive:
+        archive.writestr("datasets/soi.tsv", soi)
+    return target
+
+
+def test_money_columns_are_found_even_when_the_label_changes(renamed_zip: Path):
+    """Fair value and cost went missing across whole years when DERA reworded them."""
+    soi, _ = dera.read_quarter(renamed_zip)
+    positions = dera.to_positions(dera.tidy(soi), ciks=[1287750])
+    assert len(positions) == 1
+
+    position = positions[0]
+    assert position.fair_value == 9_800_000
+    assert position.cost == 9_950_000
+    assert position.principal == 10_000_000
+    assert position.mark == pytest.approx(98.0)
+    assert position.country == "Canada"
+
+
+def test_a_fair_value_level_column_is_not_mistaken_for_a_fair_value():
+    frame = dera.tidy(__import__("pandas").DataFrame({
+        "cik": [1], "ddate": [20250630],
+        "Investment, Identifier Axis": ["Acme, First Lien Term Loan"],
+        "Fair Value Hierarchy and NAV Axis": ["Level 3"],
+        "Investment Owned, at Fair Value": [100],
+    }))
+    position = dera.to_positions(frame, ciks=[1])[0]
+    assert position.fair_value == 100
