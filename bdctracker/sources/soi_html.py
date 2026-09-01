@@ -10,6 +10,21 @@ This parses that table and returns attributes only. The numbers stay with the
 XBRL, which is unambiguous; matching a parsed row to a tagged position by
 borrower and facility is reliable enough to carry a sector, and not reliable
 enough to carry a valuation.
+
+**Status: works on the layouts it is tested against, not yet on real filings.**
+It is off by default in the harvest, and `bdc schedule --debug` is the way to
+work on it. Against Main Street's latest 10-Q it recognises the schedule's
+column layout correctly — issuer, instrument, maturity, principal, cost and
+fair value all classify — and still returns only the money-market holdings at
+the end of the schedule. The main body is split across dozens of page-sized
+tables of about forty rows each, and something in those rows is not lining up
+with the header the classifier found. `--debug` prints each row's populated
+cells with their indices, the borrower it resolved and which priced columns
+matched, which is the information needed to close the gap.
+
+Enabling it before that is resolved would fill a small number of positions and
+leave the rest untouched, which is not harmful but is not yet worth the request
+per filing.
 """
 from __future__ import annotations
 

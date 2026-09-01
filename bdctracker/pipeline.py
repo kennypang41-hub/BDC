@@ -78,7 +78,7 @@ def harvest_filings(
     forms: Sequence[str] = ("10-K", "10-Q"),
     limit_per_bdc: int | None = None,
     workers: int = 4,
-    with_schedule: bool = True,
+    with_schedule: bool = False,
 ) -> list[Position]:
     """Pull positions straight from filings, a few BDCs at a time.
 
