@@ -43,7 +43,8 @@ MARK_COLUMNS: list[tuple[str, str | None, str | None, int]] = [
     ("Facility",              "facility",          None,          12),
     ("Sector",                "industry",          None,          26),
     ("Country",               "country",           None,          16),
-    ("Ccy",                   "currency",          None,          6),
+    ("Principal ccy",         "principal_ccy",     None,          13),
+    ("Fair value ccy",        "fair_value_ccy",    None,          14),
     ("Principal",             "principal",         MONEY,         16),
     ("Cost",                  "cost",              MONEY,         16),
     ("Fair value",            "fair_value",        MONEY,         16),
@@ -86,8 +87,13 @@ SELECT
     m.period_end, b.ticker, b.name AS bdc_name, m.cik,
     i.display_name AS issuer_name,
     l.investment_type, l.lien, l.facility, m.industry, l.currency,
-    m.principal, m.cost, m.fair_value, m.shares,
-    CASE WHEN m.principal > 0 THEN m.principal ELSE m.cost END AS mark_basis,
+    m.principal, m.cost, m.fair_value, m.shares, m.principal_ccy, m.fair_value_ccy,
+    -- The denominator must share the numerator's currency, or the ratio is an
+    -- exchange rate rather than a mark.
+    CASE WHEN m.principal > 0
+              AND (m.principal_ccy IS NULL OR m.fair_value_ccy IS NULL
+                   OR m.principal_ccy = m.fair_value_ccy)
+         THEN m.principal ELSE m.cost END AS mark_basis,
     m.interest_rate, m.spread, m.reference_rate, m.pik_rate, m.pct_net_assets,
     m.maturity_date, m.acquisition_date, m.country, m.fair_value_level,
     CAST(substr(m.maturity_date, 1, 4) AS INTEGER)    AS maturity_year,
@@ -155,10 +161,14 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> tuple[int, dic
                     # Principal is the denominator; mark basis only stands in
                     # where the filing reports no principal (equity, or debt the
                     # filer left untagged).
+                    # Principal only when its currency matches the fair value's;
+                    # Mark basis already encodes that test, so defer to it when
+                    # the two differ.
                     value = (
                         f"=IFERROR({fair_value}{row_number}"
-                        f"/IF({principal}{row_number}>0,{principal}{row_number},"
-                        f"{basis}{row_number})*100,\"\")"
+                        f"/IF(AND({principal}{row_number}>0,"
+                        f"{principal}{row_number}={basis}{row_number}),"
+                        f"{principal}{row_number},{basis}{row_number})*100,\"\")"
                     )
                 elif header == "Unrealised":
                     value = f"=IFERROR({fair_value}{row_number}-{cost}{row_number},\"\")"
@@ -474,6 +484,13 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
         "no_principal flag.")
     put("Grain", "One row per (loan, quarter) on the Marks sheet.")
     put("Rates", "Coupon, spread and PIK are true percentages (5.75% is stored as 0.0575).")
+    put("Currency",
+        "Fair value is reported in USD. Principal is often reported in the loan's own "
+        "currency, so 'Principal ccy' and 'Fair value ccy' hold the unit the filing tagged "
+        "for each. A mark is only meaningful when both sides share a currency, so where they "
+        "differ the mark divides by cost — which is reported in USD alongside fair value — "
+        "and the row is flagged principal_in_<ccy>. Sterling and euro positions were "
+        "otherwise 'marked' at 111 to 130, which is the exchange rate, not a valuation.")
     put("Non-accrual",
         "'Not disclosed' is not the same as 'No'. Non-accrual status lives in filing "
         "footnotes; where a filing disclosed none, status is left unknown rather than "

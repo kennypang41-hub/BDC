@@ -77,10 +77,12 @@ def test_mark_is_a_live_formula_not_a_baked_number(conn, tmp_path):
     assert isinstance(formula, str) and formula.startswith("=IFERROR(")
     assert "*100" in formula
 
-    # It must divide by Principal, using Mark basis only as a fallback.
+    # Principal is the denominator, but only when it is the same figure as the
+    # mark basis — which encodes the currency test.
     principal = get_column_letter(headers.index("Principal") + 1)
     basis = get_column_letter(headers.index("Mark basis (fallback)") + 1)
-    assert f"IF({principal}2>0,{principal}2,{basis}2)" in formula
+    assert f"AND({principal}2>0,{principal}2={basis}2)" in formula
+    assert f",{principal}2,{basis}2)" in formula
 
 
 def test_mark_basis_is_par_for_debt_and_cost_for_equity(conn, tmp_path):

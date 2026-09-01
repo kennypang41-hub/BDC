@@ -151,6 +151,10 @@ def positions_from_xbrl(
             value = fact.get("value")
         if value is not None and field not in bucket:
             bucket[field] = value
+            # edgartools resolves each fact's unit_ref to an ISO 4217 code.
+            currency = fact.get("currency")
+            if currency:
+                bucket[f"{field}_currency"] = currency
         bucket.setdefault("_dims", {}).update(_describe_dimensions(fact))
 
     non_accrual = nonaccrual_by_period or {}
@@ -185,6 +189,9 @@ def positions_from_xbrl(
             fair_value=normalize.to_decimal(bucket.get("fair_value")),
             cost=normalize.to_decimal(bucket.get("cost")),
             principal=normalize.to_decimal(bucket.get("principal")),
+            fair_value_currency=bucket.get("fair_value_currency"),
+            cost_currency=bucket.get("cost_currency"),
+            principal_currency=bucket.get("principal_currency"),
             shares=normalize.to_decimal(bucket.get("shares")),
             interest_rate=normalize.to_rate_pct(bucket.get("interest_rate")),
             spread=normalize.to_rate_pct(bucket.get("spread")),

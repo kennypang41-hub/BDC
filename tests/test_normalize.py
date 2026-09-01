@@ -305,3 +305,59 @@ def test_vintage_is_unknown_rather_than_guessed_from_the_period():
     position = make(fair_value=Decimal("100"), principal=Decimal("100"))
     assert position.acquisition_date is None
     assert position.vintage_year is None
+
+
+# ---------------------------------------------------------------------------
+# Currency of the denominator
+# ---------------------------------------------------------------------------
+
+def _cross_currency():
+    """RL Datix as OBDC files it: sterling principal, dollar fair value."""
+    return make(
+        identifier="RL Datix Holdings, First Lien Term Loan",
+        principal=Decimal("25885000"), principal_currency="GBP",
+        cost=Decimal("34100000"), cost_currency="USD",
+        fair_value=Decimal("33755000"), fair_value_currency="USD",
+    )
+
+
+def test_a_local_currency_principal_is_not_used_against_a_dollar_fair_value():
+    """Dividing USD by GBP returned 130.4 — the exchange rate, not a mark."""
+    position = _cross_currency()
+    assert position.mark_basis == Decimal("34100000")
+    assert position.mark_basis_currency == "USD"
+    assert position.mark == pytest.approx(100 * 33.755 / 34.1, rel=1e-4)
+    assert 95 < position.mark < 102
+
+
+def test_the_cross_currency_case_is_flagged():
+    positions = [_cross_currency()]
+    normalize.flag_quality(positions)
+    assert "principal_in_gbp" in positions[0].flags
+
+
+def test_a_matching_currency_principal_is_still_preferred():
+    position = make(
+        identifier="Acme Corp, First Lien Term Loan",
+        principal=Decimal("1000"), principal_currency="EUR",
+        cost=Decimal("950"), cost_currency="EUR",
+        fair_value=Decimal("900"), fair_value_currency="EUR",
+    )
+    assert position.mark_basis == Decimal("1000")
+    assert position.mark == pytest.approx(90.0)
+
+
+def test_untagged_units_fall_back_to_the_filings_own_consistency():
+    """Most filings tag no unit at all; assume they are internally consistent."""
+    position = make(fair_value=Decimal("900"), principal=Decimal("1000"))
+    assert position.principal_currency is None
+    assert position.mark == pytest.approx(90.0)
+
+
+def test_no_denominator_in_the_right_currency_yields_no_mark():
+    position = make(
+        principal=Decimal("1000"), principal_currency="GBP",
+        fair_value=Decimal("1300"), fair_value_currency="USD",
+    )
+    assert position.mark_basis is None
+    assert position.mark is None

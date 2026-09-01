@@ -310,6 +310,14 @@ def flag_quality(positions: Sequence[Position]) -> Sequence[Position]:
             position.flags.append("implausible_mark")
         if position.investment_type == "UNKNOWN":
             position.flags.append("unclassified")
+        if (
+            position.principal
+            and position.fair_value_currency
+            and position.principal_currency
+            and position.principal_currency != position.fair_value_currency
+        ):
+            # Marked against cost instead; the ratio would otherwise be an FX rate.
+            position.flags.append("principal_in_" + position.principal_currency.lower())
     return positions
 
 

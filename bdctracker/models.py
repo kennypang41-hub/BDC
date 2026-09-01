@@ -28,6 +28,13 @@ class Position:
     principal: Decimal | None = None
     shares: Decimal | None = None
 
+    #: ISO 4217 unit of each amount, as the filing tagged it. Filers commonly
+    #: report principal in the loan's own currency and fair value in USD, so
+    #: these are not always the same and must not be assumed.
+    fair_value_currency: str | None = None
+    cost_currency: str | None = None
+    principal_currency: str | None = None
+
     interest_rate: float | None = None
     spread: float | None = None
     reference_rate: str | None = None
@@ -70,10 +77,37 @@ class Position:
 
     @property
     def mark_basis(self) -> Decimal | None:
-        """The denominator the mark actually used: principal, else cost."""
-        if self.principal is not None and self.principal != 0:
+        """The denominator the mark used: principal, else cost — same currency.
+
+        A mark is a ratio, so it is currency-free only when both sides are in
+        one currency. Filers routinely report principal in the loan's own
+        currency and fair value in USD; dividing one by the other returns the
+        exchange rate, which is how a healthy sterling loan came out "marked" at
+        130. Cost is reported alongside fair value in USD, so it is the correct
+        denominator whenever principal is not in the numerator's currency.
+        """
+        if self.principal is not None and self.principal != 0 and self._matches(
+            self.principal_currency
+        ):
             return self.principal
-        return self.cost
+        if self.cost is not None and self.cost != 0 and self._matches(self.cost_currency):
+            return self.cost
+        return None
+
+    def _matches(self, currency: str | None) -> bool:
+        """True when an amount shares the fair value's unit, or units are unknown."""
+        if currency is None or self.fair_value_currency is None:
+            return True  # nothing tagged; the filing's own consistency is all we have
+        return currency == self.fair_value_currency
+
+    @property
+    def mark_basis_currency(self) -> str | None:
+        basis = self.mark_basis
+        if basis is None:
+            return None
+        if basis == self.principal:
+            return self.principal_currency or self.fair_value_currency
+        return self.cost_currency or self.fair_value_currency
 
     @property
     def vintage_year(self) -> int | None:
