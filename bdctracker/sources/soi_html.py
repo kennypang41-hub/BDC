@@ -121,10 +121,30 @@ def _flatten_headers(table) -> list[str]:
     return merged
 
 
+#: A schedule describes each holding as well as pricing it. Requiring one of
+#: these keeps the balance sheet out: it also names things and carries figures,
+#: and on a loose test its rows arrive as borrowers called "550,612" in a sector
+#: called "LIABILITIES".
+_DESCRIPTIVE = ("instrument", "maturity", "acquisition", "industry")
+
+
 def is_schedule_of_investments(columns: dict[str, int]) -> bool:
-    """A schedule names a borrower and prices it; anything less is another table."""
+    """A schedule names a borrower, describes the holding, and prices it."""
     priced = "fair_value" in columns and ("cost" in columns or "principal" in columns)
-    return priced and "issuer" in columns
+    described = any(field in columns for field in _DESCRIPTIVE)
+    return priced and described and "issuer" in columns
+
+
+def looks_like_a_borrower(text: str) -> bool:
+    """Text that could name a company, rather than a figure or a section label."""
+    if not text or _NUMERIC.match(text) or _TOTAL_ROW.match(text):
+        return False
+    letters = sum(c.isalpha() for c in text)
+    if letters < 3:
+        return False
+    # Balance-sheet captions shout; borrowers do not.
+    stripped = re.sub(r"[^A-Za-z]", "", text)
+    return not (stripped.isupper() and len(stripped) > 4)
 
 
 def _row_values(row, width: int) -> list[str]:
@@ -174,6 +194,9 @@ def _is_section_heading(values: list[str]) -> str | None:
 
 #: How many leading rows to consider as a header when the markup marks none.
 _HEADER_SCAN = 6
+
+#: Fewer rows than this and the table is something else that happened to match.
+_MIN_SCHEDULE_ROWS = 3
 
 
 def locate_header(table) -> tuple[list[str], dict[str, int], int]:
@@ -241,7 +264,7 @@ def parse_table(table) -> list[SoiAttributes]:
             continue
 
         issuer = _near(values, columns.get("issuer")) or ""
-        if not issuer or _TOTAL_ROW.match(issuer):
+        if not looks_like_a_borrower(issuer):
             continue
         # A borrower row prices something; a stray label does not.
         if not any(
@@ -265,7 +288,10 @@ def parse_table(table) -> list[SoiAttributes]:
                 instrument=value("instrument") or issuer,
             )
         )
-    return out
+
+    # A schedule lists many holdings. A couple of rows scraped out of some other
+    # table is a false positive, not a short schedule.
+    return out if len(out) >= _MIN_SCHEDULE_ROWS else []
 
 
 def parse_filing(filing) -> list[SoiAttributes]:

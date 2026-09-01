@@ -67,7 +67,7 @@ def schedule() -> FakeTable:
 
 
 def test_the_schedule_table_is_recognised_and_others_are_not():
-    columns = {"issuer": 0, "fair_value": 6, "cost": 5}
+    columns = {"issuer": 0, "instrument": 1, "fair_value": 6, "cost": 5}
     assert soi_html.is_schedule_of_investments(columns)
     # A balance sheet names no borrower.
     assert not soi_html.is_schedule_of_investments({"fair_value": 1, "cost": 2})
@@ -177,6 +177,10 @@ def headerless_schedule() -> FakeTable:
             _row("Software", "", "", "", "", "", "", spans=[7, 1, 1, 1, 1, 1, 1]),
             _row("Acme Holdings, LLC", "First Lien Term Loan", "3/15/2021",
                  "6/30/2029", "10,000", "9,950", "9,800"),
+            _row("Acme Holdings, LLC", "Revolver", "3/15/2021",
+                 "6/30/2028", "1,000", "990", "980"),
+            _row("Beta Industries Inc.", "Second Lien Term Loan", "9/1/2019",
+                 "3/31/2027", "5,000", "5,000", "2,000"),
         ],
     )
 
@@ -189,11 +193,12 @@ def test_a_header_in_ordinary_cells_is_still_found():
 
 def test_headerless_tables_parse_and_keep_their_dates_apart():
     rows = soi_html.parse_table(headerless_schedule())
-    assert len(rows) == 1
-    assert rows[0].issuer == "Acme Holdings, LLC"
-    assert rows[0].industry == "Software"
-    assert rows[0].acquisition_date == date(2021, 3, 15)
-    assert rows[0].maturity_date == date(2029, 6, 30)
+    assert len(rows) == 3
+    first = rows[0]
+    assert first.issuer == "Acme Holdings, LLC"
+    assert first.industry == "Software"
+    assert first.acquisition_date == date(2021, 3, 15)
+    assert first.maturity_date == date(2029, 6, 30)
 
 
 def test_the_header_row_is_not_emitted_as_a_position():
@@ -225,6 +230,20 @@ def split_cell_schedule() -> FakeTable:
                 FakeCell("$", 1), FakeCell("9,950", 1), FakeCell("", 1),
                 FakeCell("$", 1), FakeCell("9,800", 1), FakeCell("", 1),
             ]),
+            FakeRow([
+                FakeCell("Beta Industries Inc.", 3), FakeCell("", 3),
+                FakeCell("Second Lien Term Loan", 3), FakeCell("3/31/2027", 3),
+                FakeCell("$", 1), FakeCell("5,000", 1), FakeCell("", 1),
+                FakeCell("$", 1), FakeCell("5,000", 1), FakeCell("", 1),
+                FakeCell("$", 1), FakeCell("2,000", 1), FakeCell("", 1),
+            ]),
+            FakeRow([
+                FakeCell("Gamma Corp", 3), FakeCell("", 3),
+                FakeCell("First Lien Term Loan", 3), FakeCell("12/31/2030", 3),
+                FakeCell("$", 1), FakeCell("2,500", 1), FakeCell("", 1),
+                FakeCell("$", 1), FakeCell("2,480", 1), FakeCell("", 1),
+                FakeCell("$", 1), FakeCell("2,450", 1), FakeCell("", 1),
+            ]),
         ],
     )
 
@@ -232,7 +251,7 @@ def split_cell_schedule() -> FakeTable:
 def test_a_value_is_found_when_the_currency_symbol_owns_its_own_cell():
     """The header lands on the first of three columns; the figure does not."""
     rows = soi_html.parse_table(split_cell_schedule())
-    assert len(rows) == 1
+    assert len(rows) == 3
     assert rows[0].issuer == "Acme Holdings, LLC"
     assert rows[0].industry == "Software"
     assert rows[0].maturity_date == date(2029, 6, 30)
@@ -242,3 +261,39 @@ def test_a_spanning_heading_still_reads_as_a_section():
     """The industry heading spans the table as one wide cell."""
     heading = soi_html._is_section_heading(["Software"] + [""] * 20)
     assert heading == "Software"
+
+
+# ---------------------------------------------------------------------------
+# Keeping other tables out
+# ---------------------------------------------------------------------------
+
+def test_a_balance_sheet_is_not_a_schedule():
+    """It names things and carries figures, but describes no holding."""
+    assert not soi_html.is_schedule_of_investments(
+        {"issuer": 0, "fair_value": 3, "cost": 4}
+    )
+    assert soi_html.is_schedule_of_investments(
+        {"issuer": 0, "fair_value": 3, "cost": 4, "maturity": 2}
+    )
+
+
+def test_a_figure_or_a_shouted_caption_is_not_a_borrower():
+    assert not soi_html.looks_like_a_borrower("550,612")
+    assert not soi_html.looks_like_a_borrower("LIABILITIES")
+    assert not soi_html.looks_like_a_borrower("Total investments")
+    assert not soi_html.looks_like_a_borrower("$")
+    assert soi_html.looks_like_a_borrower("Acme Holdings, LLC")
+    assert soi_html.looks_like_a_borrower("RA Outdoors LLC")
+
+
+def test_a_table_yielding_only_a_row_or_two_is_discarded():
+    """A real schedule lists many holdings; two rows is a false positive."""
+    table = FakeTable(
+        headers=[],
+        rows=[
+            _row("Portfolio Company", "Type of Investment", "Maturity", "Cost", "Fair Value"),
+            _row("Acme Holdings, LLC", "First Lien", "6/30/2029", "9,950", "9,800"),
+            _row("Beta Inc.", "Second Lien", "3/31/2027", "5,000", "2,000"),
+        ],
+    )
+    assert soi_html.parse_table(table) == []
