@@ -315,7 +315,7 @@ def schedule(
         console.print(table)
 
 
-def _dump_tables(filing, soi_html, limit: int = 25) -> None:
+def _dump_tables(filing, soi_html, limit: int = 4) -> None:
     """Show what each table looks like, so a failed match can be explained."""
     from edgar.documents import parse_html
 
@@ -339,6 +339,27 @@ def _dump_tables(filing, soi_html, limit: int = 25) -> None:
         elif rows:
             console.print(f"    row 0:  {[soi_html.cell_text(c) for c in rows[0].cells][:12]}")
         console.print(f"    columns: {columns}")
+
+        # The classification is only half the story: show the rows it is being
+        # applied to, and why each one was kept or dropped.
+        for offset, row in enumerate(rows[skip : skip + 4]):
+            cells = [soi_html.cell_text(c) for c in row.cells]
+            spans = [getattr(c, "colspan", 1) for c in row.cells]
+            expanded: list[str] = []
+            for text, span in zip(cells, spans):
+                expanded.append(text)
+                expanded.extend([""] * (span - 1))
+            filled = [(i, t) for i, t in enumerate(expanded) if t][:14]
+            console.print(f"      row {offset}: {filled}")
+            issuer = soi_html._near(expanded, columns.get("issuer"))
+            priced = [
+                (f, soi_html._near(expanded, columns.get(f), soi_html._NUMERIC))
+                for f in ("fair_value", "cost", "principal")
+            ]
+            console.print(
+                f"        issuer={issuer!r} borrower_ok="
+                f"{soi_html.looks_like_a_borrower(issuer or '')} priced={priced}"
+            )
 
 
 @app.command()
