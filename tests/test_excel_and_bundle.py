@@ -396,3 +396,41 @@ def test_a_database_with_no_priced_position_is_refused_clearly(tmp_path):
     with pytest.raises(ValueError, match="no positions with a fair value"):
         excel.export_workbook(connection, tmp_path / "empty.xlsx")
     connection.close()
+
+
+def test_loan_attributes_reach_the_rows_that_carry_a_mark(conn, tmp_path):
+    """Sector, country and vintage arrive in quarters that have no valuation.
+
+    The two sources are disjoint — the bulk sets tag these without a fair value,
+    the filings tag a fair value without these — so a loan's attributes have to
+    follow it into the quarter where its mark lives.
+    """
+    identifier = "Carried Co, First Lien Term Loan"
+    db.load_positions(conn, [
+        # Bulk-style row: attributes, no fair value.
+        normalize.finalize(Position(
+            cik=ARCC.cik, period_end=date(2025, 6, 30), source="dera",
+            identifier=identifier, principal=Decimal("1000"), cost=Decimal("1000"),
+            acquisition_date=date(2021, 4, 1), industry="Software", country="Canada",
+        )),
+        # Filing-style row: the mark, no attributes.
+        normalize.finalize(Position(
+            cik=ARCC.cik, period_end=Q2, source="xbrl", identifier=identifier,
+            principal=Decimal("1000"), cost=Decimal("1000"), fair_value=Decimal("930"),
+        )),
+    ])
+    conn.commit()
+
+    target = tmp_path / "carried.xlsx"
+    excel.export_workbook(conn, target)
+    sheet = load_workbook(target)["Marks"]
+    headers = [c.value for c in sheet[1]]
+    col = {h: headers.index(h) + 1 for h in ("Borrower", "Sector", "Country", "Vintage year")}
+
+    row = next(
+        r for r in range(2, sheet.max_row + 1)
+        if str(sheet.cell(r, col["Borrower"]).value).startswith("Carried")
+    )
+    assert sheet.cell(row, col["Sector"]).value == "Software"
+    assert sheet.cell(row, col["Country"]).value == "Canada"
+    assert sheet.cell(row, col["Vintage year"]).value == 2021

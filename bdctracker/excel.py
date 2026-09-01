@@ -89,10 +89,24 @@ def _letter(header: str) -> str:
 UNPRICED_FILTER = "AND m.fair_value IS NOT NULL"
 
 MARKS_SQL = """
+-- Sector, country and acquisition date are properties of the loan, not of the
+-- quarter it was reported in, and the two sources are disjoint: the bulk data
+-- sets carry them without a valuation, the filings carry the valuation without
+-- them. Resolving each per loan across every quarter puts them on the rows that
+-- have a mark, which is where they are of any use.
+WITH loan_attributes AS (
+    SELECT loan_id,
+           MIN(acquisition_date) AS acquisition_date,
+           MIN(industry)         AS industry,
+           MIN(country)          AS country
+    FROM marks
+    GROUP BY loan_id
+)
 SELECT
     m.period_end, b.ticker, b.name AS bdc_name, m.cik,
     i.display_name AS issuer_name,
-    l.investment_type, l.lien, l.facility, m.industry, l.currency,
+    l.investment_type, l.lien, l.facility,
+    COALESCE(m.industry, a.industry) AS industry, l.currency,
     m.principal, m.cost, m.fair_value, m.shares, m.principal_ccy, m.fair_value_ccy,
     -- The denominator must share the numerator's currency, or the ratio is an
     -- exchange rate rather than a mark.
@@ -101,9 +115,13 @@ SELECT
                    OR m.principal_ccy = m.fair_value_ccy)
          THEN m.principal ELSE m.cost END AS mark_basis,
     m.interest_rate, m.spread, m.reference_rate, m.pik_rate, m.pct_net_assets,
-    m.maturity_date, m.acquisition_date, m.country, m.fair_value_level,
-    CAST(substr(m.maturity_date, 1, 4) AS INTEGER)    AS maturity_year,
-    CAST(substr(m.acquisition_date, 1, 4) AS INTEGER) AS vintage_year,
+    m.maturity_date,
+    COALESCE(m.acquisition_date, a.acquisition_date) AS acquisition_date,
+    COALESCE(m.country, a.country)                   AS country,
+    m.fair_value_level,
+    CAST(substr(m.maturity_date, 1, 4) AS INTEGER) AS maturity_year,
+    CAST(substr(COALESCE(m.acquisition_date, a.acquisition_date), 1, 4) AS INTEGER)
+        AS vintage_year,
     CASE WHEN m.is_non_accrual = 1 THEN 'Yes'
          WHEN m.is_non_accrual = 0 THEN 'No'
          ELSE 'Not disclosed' END AS non_accrual_text,
@@ -113,6 +131,7 @@ FROM marks m
 JOIN loans   l ON l.loan_id  = m.loan_id
 JOIN bdcs    b ON b.cik      = m.cik
 JOIN issuers i ON i.issuer_id = m.issuer_id
+LEFT JOIN loan_attributes a ON a.loan_id = m.loan_id
 WHERE 1 = 1 {unpriced}
 ORDER BY m.period_end DESC, b.ticker, m.fair_value DESC
 """
