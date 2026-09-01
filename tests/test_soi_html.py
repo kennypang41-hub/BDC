@@ -199,3 +199,46 @@ def test_headerless_tables_parse_and_keep_their_dates_apart():
 def test_the_header_row_is_not_emitted_as_a_position():
     issuers = {r.issuer for r in soi_html.parse_table(headerless_schedule())}
     assert "Portfolio Company" not in issuers
+
+
+# ---------------------------------------------------------------------------
+# Columns split across cells
+# ---------------------------------------------------------------------------
+
+def split_cell_schedule() -> FakeTable:
+    """Main Street's layout: every logical column spans three physical ones,
+    the currency symbol is its own cell, and footnote markers trail the name."""
+    return FakeTable(
+        headers=[],
+        rows=[
+            FakeRow([
+                FakeCell("Portfolio Company (1) (20)", 3), FakeCell("", 3),
+                FakeCell("Type of Investment (2) (3)", 3), FakeCell("Maturity", 3),
+                FakeCell("Principal", 3), FakeCell("Cost", 3), FakeCell("Fair Value", 3),
+            ]),
+            FakeRow([FakeCell("Software", 21)]),
+            FakeRow([
+                FakeCell("Acme Holdings, LLC", 3), FakeCell("", 3),
+                FakeCell("First Lien Term Loan", 3), FakeCell("6/30/2029", 3),
+                # "$" in its own cell, the figure in the next.
+                FakeCell("$", 1), FakeCell("10,000", 1), FakeCell("", 1),
+                FakeCell("$", 1), FakeCell("9,950", 1), FakeCell("", 1),
+                FakeCell("$", 1), FakeCell("9,800", 1), FakeCell("", 1),
+            ]),
+        ],
+    )
+
+
+def test_a_value_is_found_when_the_currency_symbol_owns_its_own_cell():
+    """The header lands on the first of three columns; the figure does not."""
+    rows = soi_html.parse_table(split_cell_schedule())
+    assert len(rows) == 1
+    assert rows[0].issuer == "Acme Holdings, LLC"
+    assert rows[0].industry == "Software"
+    assert rows[0].maturity_date == date(2029, 6, 30)
+
+
+def test_a_spanning_heading_still_reads_as_a_section():
+    """The industry heading spans the table as one wide cell."""
+    heading = soi_html._is_section_heading(["Software"] + [""] * 20)
+    assert heading == "Software"

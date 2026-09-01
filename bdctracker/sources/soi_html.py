@@ -43,6 +43,12 @@ _INDUSTRY_PREFIX = re.compile(r"^\s*(industry|sector)\s*[:\-—]\s*", re.I)
 
 _NUMERIC = re.compile(r"^\(?\s*[$€£]?\s*[\d,]+(\.\d+)?\s*\)?$")
 
+#: Filers split one logical column across several cells — a "$" in its own cell,
+#: the number in the next, a footnote marker after — and a header that spans
+#: three columns lands its label on the first of them. So a value is looked for
+#: in a small window from where its header sits, not in that exact cell.
+_COLUMN_WINDOW = 4
+
 
 @dataclass(slots=True)
 class SoiAttributes:
@@ -133,6 +139,28 @@ def _row_values(row, width: int) -> list[str]:
     return values
 
 
+def _near(values: list[str], index: int | None, match=None) -> str | None:
+    """The first cell at or just after ``index`` that has content.
+
+    ``match`` narrows it to cells of a given shape, so a numeric column skips
+    the "$" that precedes its figure.
+    """
+    if index is None:
+        return None
+    for offset in range(_COLUMN_WINDOW):
+        position = index + offset
+        if position >= len(values):
+            break
+        text = values[position]
+        if not text or text in "$€£":
+            continue
+        if match is None or match.match(text):
+            return text
+        if match is not None:
+            continue
+    return None
+
+
 def _is_section_heading(values: list[str]) -> str | None:
     """A lone text cell in an otherwise empty row names the section it opens."""
     filled = [v for v in values if v]
@@ -212,18 +240,18 @@ def parse_table(table) -> list[SoiAttributes]:
             section = heading
             continue
 
-        issuer = values[columns["issuer"]] if columns.get("issuer") is not None else ""
+        issuer = _near(values, columns.get("issuer")) or ""
         if not issuer or _TOTAL_ROW.match(issuer):
             continue
         # A borrower row prices something; a stray label does not.
-        if not any(_NUMERIC.match(values[i]) for i in (
-            columns.get("fair_value"), columns.get("cost"), columns.get("principal")
-        ) if i is not None and i < width):
+        if not any(
+            _near(values, columns.get(field), _NUMERIC)
+            for field in ("fair_value", "cost", "principal")
+        ):
             continue
 
         def value(field: str) -> str | None:
-            index = columns.get(field)
-            return values[index] if index is not None and index < width else None
+            return _near(values, columns.get(field))
 
         industry = value("industry") or section
         out.append(
