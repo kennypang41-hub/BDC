@@ -322,7 +322,12 @@ def _dump_tables(filing, soi_html, limit: int = 25) -> None:
     document = parse_html(filing.html())
     tables = list(document.tables)
     console.print(f"  [dim]{len(tables)} tables in the document[/dim]")
-    for index, table in enumerate(tables[:limit]):
+    # The schedule is the largest table in the filing by a wide margin, so look
+    # at the biggest ones rather than the first ones.
+    biggest = sorted(
+        enumerate(tables), key=lambda pair: len(getattr(pair[1], "rows", [])), reverse=True
+    )[:limit]
+    for index, table in biggest:
         headers, columns, skip = soi_html.locate_header(table)
         rows = list(getattr(table, "rows", []))
         console.print(

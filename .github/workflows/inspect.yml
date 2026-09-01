@@ -68,7 +68,7 @@ jobs:
           COLUMNS: "200"
         run: |
           if [ "$MODE" = "schedule" ]; then
-            bdc schedule --ticker "$TICKER" --limit "$LIMIT" | tee inspect.txt
+            bdc schedule --ticker "$TICKER" --limit "$LIMIT" --debug | tee inspect.txt
           elif [ "$MODE" = "concepts" ]; then
             bdc concepts --ticker "$TICKER" --limit "$LIMIT" | tee inspect.txt
           else
