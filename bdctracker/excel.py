@@ -304,8 +304,8 @@ def _write_cohorts(workbook: Workbook, conn: sqlite3.Connection, period: str) ->
 
     line = 1
     for title, rows, key in (
-        (f"By vintage year (acquired) — {period}", analytics.vintage_profile(conn, period),
-         "vintage_year"),
+        ("By vintage year (acquired) — each loan's latest observation",
+         analytics.vintage_profile(conn), "vintage_year"),
         (f"By maturity year — {period}", analytics.maturity_profile(conn, period),
          "maturity_year"),
     ):

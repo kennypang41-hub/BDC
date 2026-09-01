@@ -241,3 +241,23 @@ def test_quarterly_marks_fall_back_to_cost_where_no_principal_was_reported():
     assert [r["quarter"] for r in rows] == ["2024Q1"]
     assert rows[0]["weighted_mark"] == pytest.approx(90.0)
     connection.close()
+
+
+def test_vintage_survives_a_quarter_where_the_filer_stopped_tagging_it(conn):
+    """A vintage tagged once belongs to that loan in every later quarter.
+
+    Acquisition dates come from a minority of filers; profiling a single period
+    showed every position as unknown whenever that period came from the others.
+    """
+    identifier = "Vintage Co, First Lien Term Loan"
+    db.load_positions(conn, [
+        position(ARCC.cik, Q1, identifier, 950, 1_000, acquisition_date=date(2021, 3, 1)),
+        position(ARCC.cik, Q2, identifier, 900, 1_000),  # later quarter, untagged
+    ])
+    conn.commit()
+
+    rows = {r["vintage_year"]: r for r in analytics.vintage_profile(conn)}
+    assert 2021 in rows
+    assert rows[2021]["positions"] == 1
+    # The later, untagged observation is the one that counts.
+    assert rows[2021]["fair_value"] == pytest.approx(900)

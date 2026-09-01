@@ -467,32 +467,42 @@ def quarterly_nonaccrual_share(conn: sqlite3.Connection,
     )
 
 
-def vintage_profile(conn: sqlite3.Connection, period: str | None = None) -> list[dict]:
+def vintage_profile(conn: sqlite3.Connection, period: str | None = None) -> list[dict]:  # noqa: ARG001
     """Fair value and weighted mark by the year each position was acquired.
 
     Vintage is the tagged acquisition year and nothing else. Positions the
     filing left untagged are reported as a single unknown row rather than
     assigned a year, because a cohort analysis built on a guessed vintage is
     worse than one that admits its coverage.
+
+    Built from each loan's most recent observation rather than from a single
+    quarter. Acquisition dates come from a minority of filers, and confining the
+    cohorts to one period would show nothing at all whenever that period's data
+    happens to come from filers who do not tag them.
     """
-    period = period or latest_period(conn)
-    if period is None:
-        return []
     return _rows(
         conn,
         f"""
-        SELECT CAST(substr(acquisition_date, 1, 4) AS INTEGER) AS vintage_year,
+        WITH latest AS (
+            SELECT loan_id, MAX(period_end) AS period_end FROM marks GROUP BY loan_id
+        ), current AS (
+            SELECT v.* FROM v_marks v
+            JOIN latest l ON l.loan_id = v.loan_id AND l.period_end = v.period_end
+        ), vintages AS (
+            -- A loan tagged in any quarter keeps that vintage in every other.
+            SELECT loan_id, MIN(acquisition_date) AS acquisition_date
+            FROM marks WHERE acquisition_date IS NOT NULL GROUP BY loan_id
+        )
+        SELECT CAST(substr(vintages.acquisition_date, 1, 4) AS INTEGER) AS vintage_year,
                COUNT(*)        AS positions,
                SUM(fair_value) AS fair_value,
                SUM({BASIS})    AS basis,
                100.0 * SUM(fair_value) / NULLIF(SUM({BASIS}), 0) AS weighted_mark,
                SUM(CASE WHEN is_non_accrual = 1 THEN fair_value END) AS nonaccrual_fair_value
-        FROM v_marks
-        WHERE period_end = ?
+        FROM current LEFT JOIN vintages ON vintages.loan_id = current.loan_id
         GROUP BY vintage_year
         ORDER BY vintage_year IS NULL, vintage_year
         """,
-        (period,),
     )
 
 
