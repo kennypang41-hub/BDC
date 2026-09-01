@@ -467,6 +467,58 @@ def quarterly_nonaccrual_share(conn: sqlite3.Connection,
     )
 
 
+def vintage_profile(conn: sqlite3.Connection, period: str | None = None) -> list[dict]:
+    """Fair value and weighted mark by the year each position was acquired.
+
+    Vintage is the tagged acquisition year and nothing else. Positions the
+    filing left untagged are reported as a single unknown row rather than
+    assigned a year, because a cohort analysis built on a guessed vintage is
+    worse than one that admits its coverage.
+    """
+    period = period or latest_period(conn)
+    if period is None:
+        return []
+    return _rows(
+        conn,
+        f"""
+        SELECT CAST(substr(acquisition_date, 1, 4) AS INTEGER) AS vintage_year,
+               COUNT(*)        AS positions,
+               SUM(fair_value) AS fair_value,
+               SUM({BASIS})    AS basis,
+               100.0 * SUM(fair_value) / NULLIF(SUM({BASIS}), 0) AS weighted_mark,
+               SUM(CASE WHEN is_non_accrual = 1 THEN fair_value END) AS nonaccrual_fair_value
+        FROM v_marks
+        WHERE period_end = ?
+        GROUP BY vintage_year
+        ORDER BY vintage_year IS NULL, vintage_year
+        """,
+        (period,),
+    )
+
+
+def maturity_profile(conn: sqlite3.Connection, period: str | None = None) -> list[dict]:
+    """Fair value and weighted mark by the year each loan matures."""
+    period = period or latest_period(conn)
+    if period is None:
+        return []
+    return _rows(
+        conn,
+        f"""
+        SELECT CAST(substr(maturity_date, 1, 4) AS INTEGER) AS maturity_year,
+               COUNT(*)        AS positions,
+               SUM(fair_value) AS fair_value,
+               SUM({BASIS})    AS basis,
+               100.0 * SUM(fair_value) / NULLIF(SUM({BASIS}), 0) AS weighted_mark,
+               SUM(CASE WHEN is_non_accrual = 1 THEN fair_value END) AS nonaccrual_fair_value
+        FROM v_marks
+        WHERE period_end = ? AND is_debt = 1
+        GROUP BY maturity_year
+        ORDER BY maturity_year IS NULL, maturity_year
+        """,
+        (period,),
+    )
+
+
 def country_exposure(conn: sqlite3.Connection, period: str | None = None) -> list[dict]:
     """Fair value and weighted mark by country of the borrower."""
     period = period or latest_period(conn)

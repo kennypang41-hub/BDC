@@ -288,3 +288,20 @@ def test_country_survives_finalize_when_the_filing_tagged_it():
                  country="Germany [Member]")
     )
     assert position.country == "Germany"
+
+
+# ---------------------------------------------------------------------------
+# Vintage
+# ---------------------------------------------------------------------------
+
+def test_vintage_year_comes_from_the_tagged_acquisition_date():
+    position = make(acquisition_date=date(2021, 7, 15), maturity_date=date(2028, 7, 15))
+    assert position.vintage_year == 2021
+    assert position.maturity_year == 2028
+
+
+def test_vintage_is_unknown_rather_than_guessed_from_the_period():
+    """First appearance in the panel is when coverage began, not the vintage."""
+    position = make(fair_value=Decimal("100"), principal=Decimal("100"))
+    assert position.acquisition_date is None
+    assert position.vintage_year is None

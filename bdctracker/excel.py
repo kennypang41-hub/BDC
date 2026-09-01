@@ -57,7 +57,9 @@ MARK_COLUMNS: list[tuple[str, str | None, str | None, int]] = [
     ("PIK",                   "pik_rate",          PCT,           10),
     ("% of net assets",       "pct_net_assets",    PCT,           14),
     ("Maturity",              "maturity_date",     None,          12),
+    ("Maturity year",         "maturity_year",     "0",           14),
     ("Acquired",              "acquisition_date",  None,          12),
+    ("Vintage year",          "vintage_year",      "0",           13),
     ("FV level",              "fair_value_level",  None,          10),
     ("Non-accrual",           "non_accrual_text",  None,          12),
     ("Debt",                  "is_debt",           "0",           6),
@@ -88,6 +90,8 @@ SELECT
     CASE WHEN m.principal > 0 THEN m.principal ELSE m.cost END AS mark_basis,
     m.interest_rate, m.spread, m.reference_rate, m.pik_rate, m.pct_net_assets,
     m.maturity_date, m.acquisition_date, m.country, m.fair_value_level,
+    CAST(substr(m.maturity_date, 1, 4) AS INTEGER)    AS maturity_year,
+    CAST(substr(m.acquisition_date, 1, 4) AS INTEGER) AS vintage_year,
     CASE WHEN m.is_non_accrual = 1 THEN 'Yes'
          WHEN m.is_non_accrual = 0 THEN 'No'
          ELSE 'Not disclosed' END AS non_accrual_text,
@@ -289,6 +293,55 @@ def _write_summary(workbook: Workbook, conn: sqlite3.Connection,
         cell.border = Border(top=THIN)
 
 
+def _write_cohorts(workbook: Workbook, conn: sqlite3.Connection, period: str) -> None:
+    """Vintage and maturity cohorts, side by side on one sheet."""
+    sheet = workbook.create_sheet("Vintage & maturity")
+    columns = [
+        ("Year", None, "0", 10), ("Positions", None, INT, 11),
+        ("Fair value", None, MONEY, 16), ("Basis", None, MONEY, 16),
+        ("Mark", None, PRICE, 9), ("Non-accrual FV", None, MONEY, 16),
+    ]
+
+    line = 1
+    for title, rows, key in (
+        (f"By vintage year (acquired) — {period}", analytics.vintage_profile(conn, period),
+         "vintage_year"),
+        (f"By maturity year — {period}", analytics.maturity_profile(conn, period),
+         "maturity_year"),
+    ):
+        header = sheet.cell(row=line, column=1, value=title)
+        header.font = Font(name=FONT, bold=True, size=12)
+        line += 1
+        for index, (label, _key, fmt, width) in enumerate(columns, start=1):
+            cell = sheet.cell(row=line, column=index, value=label)
+            cell.font = HEADER_FONT
+            cell.fill = HEADER_FILL
+            sheet.column_dimensions[get_column_letter(index)].width = width
+        line += 1
+        for row in rows:
+            year = row.get(key)
+            sheet.cell(row=line, column=1,
+                       value="Not disclosed" if year is None else year)
+            for offset, value in enumerate(
+                (row["positions"], row["fair_value"], row["basis"],
+                 row["weighted_mark"], row["nonaccrual_fair_value"]), start=2
+            ):
+                cell = sheet.cell(row=line, column=offset, value=value)
+                cell.number_format = columns[offset - 1][2]
+            for column in range(1, len(columns) + 1):
+                sheet.cell(row=line, column=column).font = Font(name=FONT)
+            line += 1
+        line += 2
+
+    note = sheet.cell(
+        row=line, column=1,
+        value="Vintage is the acquisition date the filing tags, never inferred. Most filers "
+              "do not tag it — see the Read me — so 'Not disclosed' carries the bulk of the "
+              "portfolio and the year rows are a partial view.",
+    )
+    note.font = Font(name=FONT, italic=True, size=9)
+
+
 def _write_disagreements(workbook: Workbook, conn: sqlite3.Connection, period: str) -> None:
     sheet = workbook.create_sheet("Disagreements")
     columns = [
@@ -404,10 +457,16 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
         "rather than as a dimension on the fair-value fact, so it reaches roughly 2% of "
         "positions; geography is tagged on well under 1%. Blank means the filing did not "
         "tag it — neither field is ever inferred.")
-    put("Maturity",
-        "Taken from the tagged maturity date, or read from the position label where the "
-        "filer printed one ('due 6/30/2029') without tagging it. About a quarter of "
-        "positions carry one either way.")
+    put("Maturity and vintage",
+        "Maturity comes from the tagged maturity date, or from the position label where a "
+        "filer printed one ('due 6/30/2029') without tagging it. Vintage is the year of the "
+        "tagged acquisition date and is never inferred: the quarter a position first appears "
+        "in this dataset is when coverage began, not when the loan was made, and treating "
+        "one as the other would put every legacy loan in the wrong cohort. Both are sparse "
+        "because many filers tag neither — Main Street's latest 10-Q, for one, tags fair "
+        "value, cost, principal, rates and shares per investment and nothing else. They are "
+        "printed in the schedule but not in the XBRL, so reaching them means parsing the "
+        "rendered table rather than reading a fact.")
     put("Principal",
         "Principal outstanding as the filing reports it. Blank where the filer did not "
         "tag it, in which case the mark falls back to cost and the row carries the "
@@ -475,6 +534,7 @@ def export_workbook(conn: sqlite3.Connection, path: str | Path,
         "the filing disclosed no non-accrual status at all.",
     )
 
+    _write_cohorts(workbook, conn, period)
     _write_disagreements(workbook, conn, period)
     _write_readme(workbook, conn, period, sources)
     workbook.save(path)

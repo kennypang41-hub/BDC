@@ -16,7 +16,7 @@ from bdctracker.universe import BDC
 
 ARCC = BDC(ticker="ARCC", cik=1287750, name="Ares Capital", exchange="Nasdaq")
 TSLX = BDC(ticker="TSLX", cik=1508655, name="Sixth Street", exchange="NYSE")
-Q = date(2025, 12, 31)
+Q = Q2 = date(2025, 12, 31)
 
 
 def _position(cik, identifier, fv, par, cost=None, **kwargs):
@@ -60,7 +60,7 @@ def test_workbook_has_every_sheet_and_row(conn, tmp_path):
     assert book.sheetnames == [
         "Read me", "Marks", "BDC summary",
         "Mark by quarter", "Non-accrual mark", "Non-accrual %",
-        "Disagreements",
+        "Vintage & maturity", "Disagreements",
     ]
     assert book["Marks"].max_row == 5  # header + 4
 
@@ -314,3 +314,25 @@ def test_summary_ranges_cover_only_their_own_quarter(conn, tmp_path):
     rows = {sheet.cell(r, 1).value: r for r in range(2, sheet.max_row + 1)}
     # Still the Q4 figure, not Q4 plus the Q3 row.
     assert float(values[f"BDC SUMMARY!F{rows['ARCC']}"]) == pytest.approx(11_100_000)
+
+
+@pytest.mark.slow
+def test_vintage_sheet_separates_disclosed_years_from_unknown(conn, tmp_path):
+    """Untagged positions get their own row, not a made-up year."""
+    db.load_positions(conn, [
+        normalize.finalize(Position(
+            cik=ARCC.cik, period_end=Q2, source="dera",
+            identifier="Vintage Co, First Lien Term Loan",
+            fair_value=Decimal("900"), principal=Decimal("1000"), cost=Decimal("1000"),
+            acquisition_date=date(2021, 5, 1), accession="a", form="10-K",
+        ))
+    ])
+    conn.commit()
+
+    target = tmp_path / "vintage.xlsx"
+    excel.export_workbook(conn, target)
+    sheet = load_workbook(target)["Vintage & maturity"]
+    labels = [sheet.cell(r, 1).value for r in range(1, sheet.max_row + 1)]
+
+    assert 2021 in labels
+    assert "Not disclosed" in labels

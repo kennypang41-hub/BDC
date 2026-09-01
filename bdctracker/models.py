@@ -76,6 +76,21 @@ class Position:
         return self.cost
 
     @property
+    def vintage_year(self) -> int | None:
+        """The year the BDC acquired the position, where the filing says so.
+
+        Only ever the tagged acquisition date. The quarter a position first
+        appears in this dataset is not its vintage — it is the quarter our
+        coverage began — and reporting one as the other would put every legacy
+        loan in the wrong cohort.
+        """
+        return self.acquisition_date.year if self.acquisition_date else None
+
+    @property
+    def maturity_year(self) -> int | None:
+        return self.maturity_date.year if self.maturity_date else None
+
+    @property
     def unrealized(self) -> Decimal | None:
         if self.fair_value is None or self.cost is None:
             return None
