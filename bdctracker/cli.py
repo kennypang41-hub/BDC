@@ -255,6 +255,63 @@ def concepts(
 
 
 @app.command()
+def schedule(
+    ticker: str = typer.Option(..., help="BDC to read, e.g. MAIN."),
+    limit: int = typer.Option(1, help="How many recent filings to parse."),
+    show: int = typer.Option(12, help="How many parsed rows to print."),
+) -> None:
+    """Parse the printed Schedule of Investments and report what it yields.
+
+    The XBRL of most filers carries no sector, country, maturity or acquisition
+    date. This reads them from the rendered table, and reports coverage so the
+    parse can be judged against a real filing rather than a fixture.
+    """
+    from bdctracker.config import SecUnreachable, configure_edgar
+    from bdctracker.sources import soi_html
+    from bdctracker.universe import resolve
+
+    bdc = resolve(ticker)
+    configure_edgar()
+    from edgar import Company
+
+    try:
+        filings = Company(bdc.cik).get_filings(form=["10-K", "10-Q"])
+    except Exception as exc:
+        console.print(f"[red]Cannot reach the SEC.[/red] {exc}")
+        raise typer.Exit(3) from None
+
+    scanned = 0
+    for filing in filings:
+        if scanned >= limit:
+            break
+        scanned += 1
+        console.print(f"\n[bold]{bdc.ticker}[/bold] {filing.form} {filing.accession_no}")
+        rows = soi_html.parse_filing(filing)
+        if not rows:
+            console.print("  [yellow]no schedule table recognised[/yellow]")
+            continue
+
+        total = len(rows)
+        have = {
+            field: sum(1 for r in rows if getattr(r, field) is not None)
+            for field in ("industry", "country", "maturity_date", "acquisition_date")
+        }
+        console.print(f"  parsed {total:,} rows")
+        for field, count in have.items():
+            console.print(f"    {field:<18} {count:>6,}  ({count / total * 100:5.1f}%)")
+
+        table = Table(title="sample")
+        for column in ("Borrower", "Instrument", "Sector", "Country", "Maturity", "Acquired"):
+            table.add_column(column)
+        for row in rows[:show]:
+            table.add_row(
+                row.issuer[:34], (row.instrument or "")[:26], (row.industry or "-")[:22],
+                row.country or "-", str(row.maturity_date or "-"), str(row.acquisition_date or "-"),
+            )
+        console.print(table)
+
+
+@app.command()
 def stats(db_path: Path = typer.Option(None)) -> None:
     """Show what is in the database."""
     with db.session(db_path) as conn:

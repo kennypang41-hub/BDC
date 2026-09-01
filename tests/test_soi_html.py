@@ -1,0 +1,162 @@
+"""Parsing the printed Schedule of Investments.
+
+The fixture reproduces how BDCs actually lay the schedule out: stacked header
+rows, industry as a section heading spanning the table rather than a column,
+subtotal rows between sections, and a mix of facilities per borrower.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+
+import pytest
+
+from bdctracker import normalize
+from bdctracker.models import Position
+from bdctracker.sources import soi_html
+
+
+@dataclass
+class FakeCell:
+    content: str
+    colspan: int = 1
+
+
+@dataclass
+class FakeRow:
+    cells: list
+
+
+@dataclass
+class FakeTable:
+    headers: list = field(default_factory=list)
+    rows: list = field(default_factory=list)
+
+
+def _row(*values, spans=None):
+    spans = spans or [1] * len(values)
+    return FakeRow([FakeCell(v, s) for v, s in zip(values, spans)])
+
+
+HEADERS = [
+    [FakeCell("Portfolio Company"), FakeCell("Investment Type"), FakeCell("Acquisition"),
+     FakeCell("Maturity"), FakeCell("Principal"), FakeCell("Amortized"), FakeCell("Fair")],
+    [FakeCell(""), FakeCell(""), FakeCell("Date"), FakeCell("Date"),
+     FakeCell(""), FakeCell("Cost"), FakeCell("Value")],
+]
+
+
+def schedule() -> FakeTable:
+    return FakeTable(
+        headers=HEADERS,
+        rows=[
+            # Industry as a section heading spanning the row — the common layout.
+            _row("Software", "", "", "", "", "", "", spans=[7, 1, 1, 1, 1, 1, 1]),
+            _row("Acme Holdings, LLC", "First Lien Term Loan", "3/15/2021",
+                 "6/30/2029", "10,000", "9,950", "9,800"),
+            _row("Acme Holdings, LLC", "Revolver", "3/15/2021",
+                 "6/30/2028", "1,000", "990", "980"),
+            _row("Total Software", "", "", "", "11,000", "10,940", "10,780"),
+            _row("Health Care Providers", "", "", "", "", "", "", spans=[7, 1, 1, 1, 1, 1, 1]),
+            _row("Beta Industries Inc.", "Second Lien Term Loan", "9/1/2019",
+                 "3/31/2027", "5,000", "5,000", "2,000"),
+            _row("Total investments", "", "", "", "16,000", "15,940", "12,780"),
+        ],
+    )
+
+
+def test_the_schedule_table_is_recognised_and_others_are_not():
+    columns = {"issuer": 0, "fair_value": 6, "cost": 5}
+    assert soi_html.is_schedule_of_investments(columns)
+    # A balance sheet names no borrower.
+    assert not soi_html.is_schedule_of_investments({"fair_value": 1, "cost": 2})
+    # A commitments table prices nothing.
+    assert not soi_html.is_schedule_of_investments({"issuer": 0, "maturity": 1})
+
+
+def test_rows_carry_the_industry_heading_that_opened_their_section():
+    rows = soi_html.parse_table(schedule())
+    assert len(rows) == 3
+    by_issuer = {r.issuer: r for r in rows}
+    assert by_issuer["Acme Holdings, LLC"].industry == "Software"
+    assert by_issuer["Beta Industries Inc."].industry == "Health Care Providers"
+
+
+def test_totals_and_subtotals_are_not_positions():
+    issuers = {r.issuer for r in soi_html.parse_table(schedule())}
+    assert not any(i.lower().startswith("total") for i in issuers)
+
+
+def test_dates_are_read_from_their_own_columns():
+    rows = soi_html.parse_table(schedule())
+    loan = next(r for r in rows if r.instrument == "First Lien Term Loan")
+    assert loan.acquisition_date == date(2021, 3, 15)
+    assert loan.maturity_date == date(2029, 6, 30)
+
+
+def test_stacked_header_rows_are_joined_before_matching():
+    """"Acquisition" over "Date" is one column, and must not read as maturity."""
+    rows = soi_html.parse_table(schedule())
+    revolver = next(r for r in rows if r.instrument == "Revolver")
+    assert revolver.maturity_date == date(2028, 6, 30)
+    assert revolver.acquisition_date == date(2021, 3, 15)
+
+
+def test_a_table_that_is_not_a_schedule_yields_nothing():
+    other = FakeTable(
+        headers=[[FakeCell("Assets"), FakeCell("2026"), FakeCell("2025")]],
+        rows=[_row("Cash", "1,000", "900")],
+    )
+    assert soi_html.parse_table(other) == []
+
+
+# ---------------------------------------------------------------------------
+# Enrichment
+# ---------------------------------------------------------------------------
+
+def _position(identifier, **kwargs):
+    return normalize.finalize(Position(
+        cik=1396440, period_end=date(2026, 6, 30), identifier=identifier,
+        fair_value=Decimal("9800"), principal=Decimal("10000"), source="xbrl", **kwargs,
+    ))
+
+
+def test_enrichment_fills_the_fields_the_xbrl_omits():
+    index = soi_html.build_index(soi_html.parse_table(schedule()))
+    position = _position("Acme Holdings, LLC, First Lien Term Loan")
+    assert position.industry is None and position.acquisition_date is None
+
+    assert soi_html.enrich([position], index) == 1
+    assert position.industry == "Software"
+    assert position.acquisition_date == date(2021, 3, 15)
+    assert position.maturity_date == date(2029, 6, 30)
+    assert "enriched_from_schedule" in position.flags
+
+
+def test_enrichment_never_overwrites_a_tagged_value():
+    """A tagged value is authoritative; the parse only fills blanks."""
+    index = soi_html.build_index(soi_html.parse_table(schedule()))
+    position = _position(
+        "Acme Holdings, LLC, First Lien Term Loan",
+        industry="Tagged Sector", maturity_date=date(2030, 1, 1),
+    )
+    soi_html.enrich([position], index)
+    assert position.industry == "Tagged Sector"
+    assert position.maturity_date == date(2030, 1, 1)
+
+
+def test_maturity_follows_the_facility_not_just_the_borrower():
+    """Acme's revolver matures two years before its term loan."""
+    index = soi_html.build_index(soi_html.parse_table(schedule()))
+    revolver = _position("Acme Holdings, LLC, Revolver")
+    soi_html.enrich([revolver], index)
+    assert revolver.maturity_date == date(2028, 6, 30)
+
+
+def test_an_unmatched_borrower_is_left_alone():
+    index = soi_html.build_index(soi_html.parse_table(schedule()))
+    position = _position("Unrelated Corp, First Lien Term Loan")
+    assert soi_html.enrich([position], index) == 0
+    assert position.industry is None
+    assert position.flags == []

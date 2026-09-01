@@ -241,8 +241,14 @@ def harvest_company(
     since: date | None = None,
     limit: int | None = None,
     with_nonaccrual: bool = True,
+    with_schedule: bool = True,
 ) -> list[Position]:
-    """Walk a BDC's periodic filings and extract every tagged position."""
+    """Walk a BDC's periodic filings and extract every tagged position.
+
+    ``with_schedule`` additionally parses the printed Schedule of Investments to
+    fill in sector, country, maturity and acquisition date, which the XBRL of
+    most filers does not carry at all.
+    """
     configure_edgar()
     from edgar import Company
 
@@ -296,6 +302,28 @@ def harvest_company(
                     all_facts=facts,
                 )
             )
+            if with_schedule:
+                _enrich_from_schedule(filing, collected, cik)
         except Exception as exc:
             log.warning("extraction failed for %s %s: %s", cik, filing.accession_no, exc)
     return collected
+
+
+def _enrich_from_schedule(filing, collected: list[Position], cik: int) -> None:
+    """Fill the attributes the tagging omits from the rendered schedule."""
+    from bdctracker.sources import soi_html
+
+    accession = getattr(filing, "accession_no", None)
+    fresh = [p for p in collected if p.accession == accession]
+    if not fresh:
+        return
+    try:
+        rows = soi_html.parse_filing(filing)
+    except Exception as exc:
+        log.warning("schedule parse failed for %s %s: %s", cik, accession, exc)
+        return
+    if not rows:
+        return
+    filled = soi_html.enrich(fresh, soi_html.build_index(rows))
+    log.info("%s %s: schedule filled %s of %s positions from %s printed rows",
+             cik, accession, filled, len(fresh), len(rows))
