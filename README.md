@@ -33,8 +33,12 @@ There are two ways to read them, and this project uses both:
 
 1. **SEC DERA BDC Data Sets** (`bdctracker/sources/dera.py`) — the SEC
    re-publishes those facts as a quarterly TSV covering every BDC that filed.
-   Eight zip files cover two years of the whole universe. This is the default.
-2. **Per-filing XBRL** (`bdctracker/sources/xbrl.py`) — reads the same facts
+   Eight zip files cover two years of the whole universe, cheaply. **But they
+   carry no fair value**: principal on 55-60% of rows, acquisition dates on
+   12%, and valuations on none. They are useful for identity, principal and
+   vintage, and useless for marks on their own.
+2. **Per-filing XBRL** (`bdctracker/sources/xbrl.py`) — **where every mark comes
+   from**, reaching fair value on 97% of the positions it reads. It also reads
    straight out of a filing via [edgartools](https://github.com/dgunning/edgartools).
    Slower, but it covers the newest quarter before DERA publishes it, and any
    BDC missing from a bulk set. A 10-K carries the prior year-end schedule too,

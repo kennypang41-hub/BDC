@@ -106,16 +106,21 @@ jobs:
           fi
           bdc harvest "${args[@]}"
 
+      # Best-effort, and allowed to fail. The bulk data sets carry principal but
+      # no fair value, so on their own there may be no mark to export at all —
+      # and an early safety upload must never stop the filing pass, which is
+      # where every valuation actually comes from.
       - name: Build the exports
+        id: early_export
+        continue-on-error: true
         run: |
           bdc stats
           bdc excel --out data/bdc-marks.xlsx
           bdc bundle --out data/bdc-tracker.html
           bdc export --out data/export
 
-      # Uploaded before the filing pass, so a slow top-up cannot cost us the
-      # dataset we already have.
       - name: Upload
+        if: steps.early_export.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: bdc-marks
@@ -143,6 +148,7 @@ jobs:
           fi
           bdc harvest --start "${{ inputs.start }}" "${args[@]}"
 
+      # This one must work: it is the export that carries the marks.
       - name: Rebuild the exports with the newest quarter
         if: steps.topup.outcome == 'success'
         run: |
