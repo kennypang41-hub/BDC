@@ -545,6 +545,16 @@ def export_workbook(conn: sqlite3.Connection, path: str | Path,
     workbook = Workbook()
     workbook.remove(workbook.active)
     marks_rows, blocks = _write_marks(workbook, conn, include_unpriced)
+    if not blocks:
+        raise ValueError(
+            "no positions with a fair value; the filings for this window report "
+            "principal without a valuation. Pass include_unpriced to export them anyway."
+        )
+    # The newest period can be one the filings priced nothing in — the bulk data
+    # sets carry principal without a fair value — and summarising an empty
+    # quarter is worse than summarising the newest one that has marks.
+    if period not in blocks:
+        period = max(blocks)
     _write_summary(workbook, conn, blocks[period], period)
 
     _write_quarter_grid(

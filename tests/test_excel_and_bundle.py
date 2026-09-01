@@ -362,3 +362,37 @@ def test_positions_without_a_fair_value_are_left_out_of_the_workbook(conn, tmp_p
         .iter_rows(min_row=2, min_col=5, max_col=5, values_only=True)
     }
     assert "Unpriced Co" not in borrowers
+
+
+def test_the_summary_falls_back_to_the_newest_priced_quarter(conn, tmp_path):
+    """The newest quarter can price nothing; summarising it empty is worse."""
+    db.load_positions(conn, [
+        normalize.finalize(Position(
+            cik=ARCC.cik, period_end=date(2026, 3, 31), source="dera",
+            identifier="Later Unpriced Co, First Lien Term Loan",
+            principal=Decimal("1000"), cost=Decimal("1000"),  # no fair value
+            accession="a", form="10-K",
+        ))
+    ])
+    conn.commit()
+    assert analytics.latest_period(conn) == "2026-03-31"
+
+    result = excel.export_workbook(conn, tmp_path / "fallback.xlsx")
+    assert result["period"] == "2025-12-31"
+    assert result["marks"] == 4
+
+
+def test_a_database_with_no_priced_position_is_refused_clearly(tmp_path):
+    connection = db.connect(":memory:")
+    db.init_schema(connection)
+    db.upsert_bdcs(connection, [ARCC])
+    db.load_positions(connection, [
+        normalize.finalize(Position(
+            cik=ARCC.cik, period_end=Q2, identifier="Unpriced, First Lien Term Loan",
+            principal=Decimal("1000"), cost=Decimal("1000"), source="dera",
+        ))
+    ])
+    connection.commit()
+    with pytest.raises(ValueError, match="no positions with a fair value"):
+        excel.export_workbook(connection, tmp_path / "empty.xlsx")
+    connection.close()
