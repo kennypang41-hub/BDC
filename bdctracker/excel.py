@@ -320,8 +320,9 @@ def _write_cohorts(workbook: Workbook, conn: sqlite3.Connection, period: str) ->
         line += 1
         for row in rows:
             year = row.get(key)
-            sheet.cell(row=line, column=1,
-                       value="Not disclosed" if year is None else year)
+            year_cell = sheet.cell(row=line, column=1,
+                                   value="Not disclosed" if year is None else year)
+            year_cell.number_format = "0"  # a year is not a quantity: 2008, not 2,008
             for offset, value in enumerate(
                 (row["positions"], row["fair_value"], row["basis"],
                  row["weighted_mark"], row["nonaccrual_fair_value"]), start=2

@@ -500,6 +500,10 @@ def vintage_profile(conn: sqlite3.Connection, period: str | None = None) -> list
                100.0 * SUM(fair_value) / NULLIF(SUM({BASIS}), 0) AS weighted_mark,
                SUM(CASE WHEN is_non_accrual = 1 THEN fair_value END) AS nonaccrual_fair_value
         FROM current LEFT JOIN vintages ON vintages.loan_id = current.loan_id
+        -- Both sides of the ratio must come from the same rows. The bulk data
+        -- sets carry a basis without a fair value, and counting those in the
+        -- denominator alone drove whole cohorts to single-digit marks.
+        WHERE fair_value IS NOT NULL AND COALESCE(NULLIF(principal, 0), cost) > 0
         GROUP BY vintage_year
         ORDER BY vintage_year IS NULL, vintage_year
         """,
@@ -522,6 +526,7 @@ def maturity_profile(conn: sqlite3.Connection, period: str | None = None) -> lis
                SUM(CASE WHEN is_non_accrual = 1 THEN fair_value END) AS nonaccrual_fair_value
         FROM v_marks
         WHERE period_end = ? AND is_debt = 1
+              AND fair_value IS NOT NULL AND COALESCE(NULLIF(principal, 0), cost) > 0
         GROUP BY maturity_year
         ORDER BY maturity_year IS NULL, maturity_year
         """,
@@ -540,7 +545,8 @@ def country_exposure(conn: sqlite3.Connection, period: str | None = None) -> lis
         SELECT country, SUM(fair_value) AS fair_value, COUNT(*) AS positions,
                100.0 * SUM(CASE WHEN is_debt THEN fair_value END)
                      / NULLIF(SUM(CASE WHEN is_debt THEN principal END), 0) AS weighted_mark
-        FROM v_marks WHERE period_end = ? AND country IS NOT NULL
+        FROM v_marks
+        WHERE period_end = ? AND country IS NOT NULL AND fair_value IS NOT NULL
         GROUP BY country ORDER BY fair_value DESC
         """,
         (period,),

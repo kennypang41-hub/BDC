@@ -261,3 +261,25 @@ def test_vintage_survives_a_quarter_where_the_filer_stopped_tagging_it(conn):
     assert rows[2021]["positions"] == 1
     # The later, untagged observation is the one that counts.
     assert rows[2021]["fair_value"] == pytest.approx(900)
+
+
+def test_cohort_marks_use_the_same_rows_on_both_sides_of_the_ratio(conn):
+    """A basis without a fair value must not inflate the denominator alone.
+
+    The bulk data sets carry principal but no fair value for older quarters;
+    counting those in the basis drove whole vintages to single-digit marks.
+    """
+    identifier = "Cohort Co, First Lien Term Loan"
+    priced = position(ARCC.cik, Q2, identifier, 900, 1_000,
+                      acquisition_date=date(2022, 1, 1))
+    unpriced = normalize.finalize(Position(
+        cik=ARCC.cik, period_end=Q2, identifier="Unpriced Co, First Lien Term Loan",
+        principal=Decimal("50000"), cost=Decimal("50000"),  # no fair value
+        acquisition_date=date(2022, 1, 1), source="dera",
+    ))
+    db.load_positions(conn, [priced, unpriced])
+    conn.commit()
+
+    rows = {r["vintage_year"]: r for r in analytics.vintage_profile(conn)}
+    assert rows[2022]["weighted_mark"] == pytest.approx(90.0)
+    assert rows[2022]["positions"] == 1
