@@ -14,6 +14,12 @@ on:
         description: "Borrower name fragment, e.g. RA Outdoors"
         required: false
         default: ""
+      mode:
+        description: "positions = raw rows for a borrower; concepts = what the filing tags"
+        type: choice
+        options: ["positions", "concepts"]
+        required: false
+        default: "positions"
       limit:
         description: "How many recent filings to read"
         required: false
@@ -58,13 +64,18 @@ jobs:
           TICKER: ${{ inputs.ticker }}
           ISSUER: ${{ inputs.issuer }}
           LIMIT: ${{ inputs.limit }}
+          MODE: ${{ inputs.mode }}
           COLUMNS: "200"
         run: |
-          args=(--ticker "$TICKER" --limit "$LIMIT")
-          if [ -n "$ISSUER" ]; then
-            args+=(--issuer "$ISSUER")
+          if [ "$MODE" = "concepts" ]; then
+            bdc concepts --ticker "$TICKER" --limit "$LIMIT" | tee inspect.txt
+          else
+            args=(--ticker "$TICKER" --limit "$LIMIT")
+            if [ -n "$ISSUER" ]; then
+              args+=(--issuer "$ISSUER")
+            fi
+            bdc inspect "${args[@]}" | tee inspect.txt
           fi
-          bdc inspect "${args[@]}" | tee inspect.txt
           {
             echo '## Raw positions'
             echo '```'

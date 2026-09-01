@@ -192,6 +192,69 @@ def inspect(
 
 
 @app.command()
+def concepts(
+    ticker: str = typer.Option(..., help="BDC to read, e.g. MAIN."),
+    limit: int = typer.Option(1, help="How many recent filings to scan."),
+    top: int = typer.Option(40, help="How many concepts and axes to list."),
+) -> None:
+    """List the XBRL concepts and axes a filing actually tags per investment.
+
+    Extraction maps concept names to fields, and a name that is merely plausible
+    yields an empty column with no error. This reports what the filings really
+    carry, so the map is built from evidence rather than from guesses.
+    """
+    from collections import Counter
+
+    from bdctracker.config import SecUnreachable, configure_edgar
+    from bdctracker.sources.xbrl import IDENTIFIER_AXIS
+    from bdctracker.universe import resolve
+
+    bdc = resolve(ticker)
+    configure_edgar()
+    from edgar import Company
+
+    try:
+        filings = Company(bdc.cik).get_filings(form=["10-K", "10-Q"])
+    except Exception as exc:
+        console.print(f"[red]Cannot reach the SEC.[/red] {exc}")
+        raise typer.Exit(3) from None
+
+    concept_counts: Counter = Counter()
+    axis_counts: Counter = Counter()
+    scanned = 0
+    for filing in filings:
+        if scanned >= limit:
+            break
+        try:
+            xbrl = filing.xbrl()
+        except Exception:
+            continue
+        if xbrl is None:
+            continue
+        scanned += 1
+        console.print(f"[dim]scanning {filing.form} {filing.accession_no}[/dim]")
+        for fact in xbrl.facts.get_facts():
+            if not fact.get(IDENTIFIER_AXIS):
+                continue
+            concept_counts[fact.get("concept")] += 1
+            for key in fact:
+                if key.startswith("dim_") and key != IDENTIFIER_AXIS and fact[key]:
+                    axis_counts[key[4:]] += 1
+
+    table = Table(title=f"{bdc.ticker}: concepts on investment-dimensioned facts")
+    table.add_column("Concept"); table.add_column("Facts", justify="right")
+    for name, count in concept_counts.most_common(top):
+        table.add_row(str(name), f"{count:,}")
+    console.print(table)
+
+    table = Table(title=f"{bdc.ticker}: other axes on those facts")
+    table.add_column("Axis"); table.add_column("Facts", justify="right")
+    for name, count in axis_counts.most_common(top):
+        table.add_row(str(name), f"{count:,}")
+    console.print(table)
+
+
+@app.command()
 def stats(db_path: Path = typer.Option(None)) -> None:
     """Show what is in the database."""
     with db.session(db_path) as conn:
