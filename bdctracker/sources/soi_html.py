@@ -144,10 +144,60 @@ def _is_section_heading(values: list[str]) -> str | None:
     return _INDUSTRY_PREFIX.sub("", text).strip(" :–—-") or None
 
 
+#: How many leading rows to consider as a header when the markup marks none.
+_HEADER_SCAN = 6
+
+
+def locate_header(table) -> tuple[list[str], dict[str, int], int]:
+    """Find the header, whether the markup declares one or not.
+
+    SEC filings rarely use ``<th>``: the header is usually the first row or two
+    of ordinary cells, sometimes stacked. So fall back to scanning the leading
+    rows and keeping whichever yields a usable schedule, which also tells us
+    where the data starts.
+    """
+    declared = _flatten_headers(table)
+    columns = _classify(declared)
+    if is_schedule_of_investments(columns):
+        return declared, columns, 0
+
+    rows = list(getattr(table, "rows", []))
+    best: tuple[list[str], dict[str, int], int] | None = None
+    for index in range(min(_HEADER_SCAN, len(rows))):
+        # Stacked headers: join this row with the one above it as well.
+        for start in range(index + 1):
+            merged = _merge_rows(rows[start : index + 1])
+            candidate = _classify(merged)
+            if not is_schedule_of_investments(candidate):
+                continue
+            if best is None or len(candidate) > len(best[1]):
+                best = (merged, candidate, index + 1)
+        if best:
+            break
+    return best or ([], {}, 0)
+
+
+def _merge_rows(rows) -> list[str]:
+    """Join a run of rows cell-wise, as stacked header lines."""
+    width = 0
+    for row in rows:
+        width = max(width, sum(max(1, getattr(c, "colspan", 1)) for c in row.cells))
+    merged = [""] * width
+    for row in rows:
+        position = 0
+        for cell in row.cells:
+            text = cell_text(cell)
+            span = max(1, getattr(cell, "colspan", 1))
+            for offset in range(span):
+                if position + offset < width and text:
+                    merged[position + offset] = f"{merged[position + offset]} {text}".strip()
+            position += span
+    return merged
+
+
 def parse_table(table) -> list[SoiAttributes]:
     """Extract one schedule table, carrying section headings down its rows."""
-    headers = _flatten_headers(table)
-    columns = _classify(headers)
+    headers, columns, skip = locate_header(table)
     if not is_schedule_of_investments(columns):
         return []
 
@@ -155,7 +205,7 @@ def parse_table(table) -> list[SoiAttributes]:
     out: list[SoiAttributes] = []
     section: str | None = None
 
-    for row in getattr(table, "rows", []):
+    for row in list(getattr(table, "rows", []))[skip:]:
         values = _row_values(row, width)
         heading = _is_section_heading(values)
         if heading:

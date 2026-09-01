@@ -160,3 +160,42 @@ def test_an_unmatched_borrower_is_left_alone():
     assert soi_html.enrich([position], index) == 0
     assert position.industry is None
     assert position.flags == []
+
+
+# ---------------------------------------------------------------------------
+# Headers the markup does not declare
+# ---------------------------------------------------------------------------
+
+def headerless_schedule() -> FakeTable:
+    """SEC filings rarely use <th>; the header is just the first rows of cells."""
+    return FakeTable(
+        headers=[],
+        rows=[
+            _row("Portfolio Company", "Investment Type", "Acquisition",
+                 "Maturity", "Principal", "Amortized", "Fair"),
+            _row("", "", "Date", "Date", "", "Cost", "Value"),
+            _row("Software", "", "", "", "", "", "", spans=[7, 1, 1, 1, 1, 1, 1]),
+            _row("Acme Holdings, LLC", "First Lien Term Loan", "3/15/2021",
+                 "6/30/2029", "10,000", "9,950", "9,800"),
+        ],
+    )
+
+
+def test_a_header_in_ordinary_cells_is_still_found():
+    headers, columns, skip = soi_html.locate_header(headerless_schedule())
+    assert soi_html.is_schedule_of_investments(columns)
+    assert skip == 2  # both header lines consumed
+
+
+def test_headerless_tables_parse_and_keep_their_dates_apart():
+    rows = soi_html.parse_table(headerless_schedule())
+    assert len(rows) == 1
+    assert rows[0].issuer == "Acme Holdings, LLC"
+    assert rows[0].industry == "Software"
+    assert rows[0].acquisition_date == date(2021, 3, 15)
+    assert rows[0].maturity_date == date(2029, 6, 30)
+
+
+def test_the_header_row_is_not_emitted_as_a_position():
+    issuers = {r.issuer for r in soi_html.parse_table(headerless_schedule())}
+    assert "Portfolio Company" not in issuers

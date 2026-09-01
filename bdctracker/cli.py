@@ -259,6 +259,7 @@ def schedule(
     ticker: str = typer.Option(..., help="BDC to read, e.g. MAIN."),
     limit: int = typer.Option(1, help="How many recent filings to parse."),
     show: int = typer.Option(12, help="How many parsed rows to print."),
+    debug: bool = typer.Option(False, help="Dump every table's header and classification."),
 ) -> None:
     """Parse the printed Schedule of Investments and report what it yields.
 
@@ -286,6 +287,9 @@ def schedule(
             break
         scanned += 1
         console.print(f"\n[bold]{bdc.ticker}[/bold] {filing.form} {filing.accession_no}")
+        if debug:
+            _dump_tables(filing, soi_html)
+
         rows = soi_html.parse_filing(filing)
         if not rows:
             console.print("  [yellow]no schedule table recognised[/yellow]")
@@ -309,6 +313,27 @@ def schedule(
                 row.country or "-", str(row.maturity_date or "-"), str(row.acquisition_date or "-"),
             )
         console.print(table)
+
+
+def _dump_tables(filing, soi_html, limit: int = 25) -> None:
+    """Show what each table looks like, so a failed match can be explained."""
+    from edgar.documents import parse_html
+
+    document = parse_html(filing.html())
+    tables = list(document.tables)
+    console.print(f"  [dim]{len(tables)} tables in the document[/dim]")
+    for index, table in enumerate(tables[:limit]):
+        headers, columns, skip = soi_html.locate_header(table)
+        rows = list(getattr(table, "rows", []))
+        console.print(
+            f"  [cyan]table {index}[/cyan] rows={len(rows)} "
+            f"declared_headers={len(getattr(table, 'headers', []) or [])} skip={skip}"
+        )
+        if headers:
+            console.print(f"    header: {headers[:12]}")
+        elif rows:
+            console.print(f"    row 0:  {[soi_html.cell_text(c) for c in rows[0].cells][:12]}")
+        console.print(f"    columns: {columns}")
 
 
 @app.command()
