@@ -346,9 +346,13 @@ def bundle(
 def excel(
     out: Path = typer.Option(None, help="Output .xlsx (default data/bdc-marks-<period>.xlsx)."),
     period: str = typer.Option(None, help="Period for the summary sheets. Defaults to latest."),
+    include_unpriced: bool = typer.Option(
+        False, "--include-unpriced/--priced-only",
+        help="Keep positions the filing reported without a fair value.",
+    ),
     db_path: Path = typer.Option(None),
 ) -> None:
-    """Export every mark to a workbook: Marks, BDC summary, Disagreements, Read me."""
+    """Export the marks to a workbook: Marks, summaries, cohorts, Read me."""
     from bdctracker import excel as excel_mod
 
     with db.session(db_path) as conn:
@@ -358,7 +362,7 @@ def excel(
             SETTINGS.ensure_dirs()
             target = SETTINGS.root / f"bdc-marks-{latest or 'empty'}.xlsx"
         try:
-            result = excel_mod.export_workbook(conn, target, period)
+            result = excel_mod.export_workbook(conn, target, period, include_unpriced)
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1) from None

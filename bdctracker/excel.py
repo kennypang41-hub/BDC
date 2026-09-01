@@ -82,6 +82,12 @@ def _letter(header: str) -> str:
     return get_column_letter(_COLUMN_INDEX[header])
 
 
+#: Rows with no fair value are not marks. They are two thirds of the dataset —
+#: the bulk data sets carry principal without a valuation for older quarters —
+#: and carrying them triples the workbook for no analytical gain. They stay in
+#: the database, where `bdc export` and the API still reach them.
+UNPRICED_FILTER = "AND m.fair_value IS NOT NULL"
+
 MARKS_SQL = """
 SELECT
     m.period_end, b.ticker, b.name AS bdc_name, m.cik,
@@ -107,6 +113,7 @@ FROM marks m
 JOIN loans   l ON l.loan_id  = m.loan_id
 JOIN bdcs    b ON b.cik      = m.cik
 JOIN issuers i ON i.issuer_id = m.issuer_id
+WHERE 1 = 1 {unpriced}
 ORDER BY m.period_end DESC, b.ticker, m.fair_value DESC
 """
 
@@ -126,7 +133,8 @@ def _style_header(sheet: Worksheet, columns: list[tuple]) -> None:
     sheet.freeze_panes = "A2"
 
 
-def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> tuple[int, dict[str, tuple[int, int]]]:
+def _write_marks(workbook: Workbook, conn: sqlite3.Connection,
+                 include_unpriced: bool = False) -> tuple[int, dict[str, tuple[int, int]]]:
     """Write the fact table; return the row count and each period's row block.
 
     The query orders by period, so every period occupies a contiguous run of
@@ -145,8 +153,9 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection) -> tuple[int, dic
     unrealised = _letter("Unrealised")
 
     blocks: dict[str, list[int]] = {}
+    sql = MARKS_SQL.format(unpriced="" if include_unpriced else UNPRICED_FILTER)
     row_number = 1
-    for record in conn.execute(MARKS_SQL):
+    for record in conn.execute(sql):
         row_number += 1
         row = dict(record)
         period = row["period_end"]
@@ -482,7 +491,11 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
         "Principal outstanding as the filing reports it. Blank where the filer did not "
         "tag it, in which case the mark falls back to cost and the row carries the "
         "no_principal flag.")
-    put("Grain", "One row per (loan, quarter) on the Marks sheet.")
+    put("Grain",
+        "One row per (loan, quarter) on the Marks sheet, for every position the filing "
+        "gave a fair value. Positions reported without one are not marks and are left out "
+        "of this workbook; they remain in the database and in the JSON export. Pass "
+        "--include-unpriced to bdc excel to keep them.")
     put("Rates", "Coupon, spread and PIK are true percentages (5.75% is stored as 0.0575).")
     put("Currency",
         "Fair value is reported in USD. Principal is often reported in the loan's own "
@@ -518,7 +531,8 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
 
 
 def export_workbook(conn: sqlite3.Connection, path: str | Path,
-                    period: str | None = None) -> dict:
+                    period: str | None = None,
+                    include_unpriced: bool = False) -> dict:
     """Write the whole dataset to ``path`` and report what went in."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -530,7 +544,7 @@ def export_workbook(conn: sqlite3.Connection, path: str | Path,
 
     workbook = Workbook()
     workbook.remove(workbook.active)
-    marks_rows, blocks = _write_marks(workbook, conn)
+    marks_rows, blocks = _write_marks(workbook, conn, include_unpriced)
     _write_summary(workbook, conn, blocks[period], period)
 
     _write_quarter_grid(

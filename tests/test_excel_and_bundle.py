@@ -338,3 +338,27 @@ def test_vintage_sheet_separates_disclosed_years_from_unknown(conn, tmp_path):
 
     assert 2021 in labels
     assert "Not disclosed" in labels
+
+
+def test_positions_without_a_fair_value_are_left_out_of_the_workbook(conn, tmp_path):
+    """They are not marks, and they were two thirds of the file."""
+    db.load_positions(conn, [
+        normalize.finalize(Position(
+            cik=ARCC.cik, period_end=Q2, source="dera",
+            identifier="Unpriced Co, First Lien Term Loan",
+            principal=Decimal("1000"), cost=Decimal("1000"),  # no fair value
+            accession="a", form="10-K",
+        ))
+    ])
+    conn.commit()
+
+    priced = tmp_path / "priced.xlsx"
+    everything = tmp_path / "all.xlsx"
+    assert excel.export_workbook(conn, priced)["marks"] == 4
+    assert excel.export_workbook(conn, everything, include_unpriced=True)["marks"] == 5
+
+    borrowers = {
+        r[0] for r in load_workbook(priced, read_only=True)["Marks"]
+        .iter_rows(min_row=2, min_col=5, max_col=5, values_only=True)
+    }
+    assert "Unpriced Co" not in borrowers
