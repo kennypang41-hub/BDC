@@ -517,3 +517,53 @@ def test_the_scale_is_chosen_once_for_the_whole_schedule():
     assert [p.acquisition_date for p in positions] == [
         date(2025, 8, 1), date(2024, 1, 1), date(2022, 6, 1),
     ]
+
+
+def twin_values_schedule() -> FakeTable:
+    """Two facilities marked identically, distinguishable only by par and cost."""
+    return FakeTable(
+        headers=HEADERS,
+        rows=[
+            _row("Software", "", "", "", "", "", "", spans=[7, 1, 1, 1, 1, 1, 1]),
+            _row("Twin Facilities Inc.", "First Lien Term Loan", "01/2020",
+                 "01/2027", "5.0", "5.0", "4.9"),
+            _row("Twin Facilities Inc.", "Delayed Draw Term Loan", "06/2024",
+                 "06/2031", "9.8", "9.7", "4.9"),
+            _row("Other Borrower LLC", "First Lien Term Loan", "03/2021",
+                 "03/2028", "9.0", "9.0", "8.9"),
+        ],
+    )
+
+
+def test_the_cost_and_par_beside_a_mark_tell_two_facilities_apart():
+    """Both are marked at 4.9m; only par and cost say which is which.
+
+    Ares prints three significant figures, so a fair value alone leaves ties
+    everywhere — and a tie is refused rather than guessed, which cost real
+    coverage. The figures printed next to it resolve most of them.
+    """
+    index = soi_html.build_index(soi_html.parse_table(twin_values_schedule()))
+    term_loan = _position("Twin Facilities Inc., First Lien Term Loan",
+                          fair_value="4900000", principal="5000000")
+    term_loan.cost = Decimal("5000000")
+    delayed = _position("Twin Facilities Inc., Delayed Draw Term Loan",
+                        fair_value="4900000", principal="9800000")
+    delayed.cost = Decimal("9700000")
+
+    soi_html.enrich([term_loan, delayed], index)
+    assert term_loan.acquisition_date == date(2020, 1, 1)
+    assert term_loan.maturity_date == date(2027, 1, 1)
+    assert delayed.acquisition_date == date(2024, 6, 1)
+    assert delayed.maturity_date == date(2031, 6, 1)
+
+
+def test_a_tie_the_other_figures_cannot_break_is_still_refused():
+    """Identical on every printed figure, different dates: fill neither."""
+    index = soi_html.build_index(soi_html.parse_table(ambiguous_schedule()))
+    position = _position("Twin Facilities Inc., First Lien Term Loan",
+                         fair_value="5000000", principal="5000000")
+    position.cost = Decimal("5000000")
+
+    soi_html.enrich([position], index)
+    assert position.acquisition_date is None
+    assert position.industry == "Software"

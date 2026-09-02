@@ -70,9 +70,15 @@ class SoiAttributes:
     maturity_date: date | None = None
     acquisition_date: date | None = None
     instrument: str | None = None
+    #: The figures printed beside the holding, each with the unit it was
+    #: printed to. Together they identify a facility far more sharply than the
+    #: fair value alone, which matters where a filer prints three digits.
     fair_value: float | None = None
-    #: The unit the fair value was printed to, in the schedule's own scale.
     fair_value_step: float = 1.0
+    cost: float | None = None
+    cost_step: float = 1.0
+    principal: float | None = None
+    principal_step: float = 1.0
 
     @property
     def issuer_id(self) -> str:
@@ -293,12 +299,14 @@ def parse_table(table) -> list[SoiAttributes]:
     return read_rows(table, columns, skip, width=len(headers))
 
 
-def _priced(text: str | None) -> dict:
-    """The fair value and its printed unit, as keyword arguments."""
-    parsed = _to_number_and_step(text)
-    if parsed is None:
-        return {}
-    return {"fair_value": parsed[0], "fair_value_step": parsed[1]}
+def _priced(values: list[str], columns: dict[str, int]) -> dict:
+    """Every figure printed beside the holding, with the unit each was given."""
+    out: dict = {}
+    for field in ("fair_value", "cost", "principal"):
+        parsed = _to_number_and_step(_near(values, columns.get(field), _NUMERIC))
+        if parsed is not None:
+            out[field], out[f"{field}_step"] = parsed
+    return out
 
 
 def read_rows(table, columns: dict[str, int], skip: int, width: int = 0) -> list[SoiAttributes]:
@@ -337,7 +345,7 @@ def read_rows(table, columns: dict[str, int], skip: int, width: int = 0) -> list
                 or normalize.maturity_from_label(value("maturity")),
                 acquisition_date=normalize.to_date(value("acquisition")),
                 instrument=value("instrument") or issuer,
-                **_priced(_near(values, columns.get("fair_value"), _NUMERIC)),
+                **_priced(values, columns),
             )
         )
 
@@ -480,19 +488,40 @@ def _choose_scale(pairs_by_issuer) -> float | None:
     return best
 
 
-def _within_reach(row: SoiAttributes, tagged: float, scale: float) -> float | None:
-    """How far a printed row sits from a tagged value, if close enough to be it.
+def _figure_matches(printed: float | None, step: float, tagged, scale: float) -> bool:
+    """Whether a printed figure could be the tagged one, given how it was printed.
 
-    The window is set by what the figure was printed to, not by a fixed
-    percentage: Ares states millions to one decimal, so 11.8 asserts only that
-    the holding lies between 11.75m and 11.85m, and demanding a tenth of a
-    percent rejects every row it should match. Blackstone states thousands to
-    the unit, where the same rule is far tighter.
+    The window is what the figure was printed to, not a fixed percentage: Ares
+    states millions to one decimal, so 11.8 asserts only that the holding lies
+    between 11.75m and 11.85m, and demanding a tenth of a percent rejects every
+    row it should match. Blackstone states thousands to the unit, where the same
+    rule is far tighter.
     """
-    printed = row.fair_value * scale
-    window = max(0.5 * row.fair_value_step * scale, abs(tagged) * _VALUE_TOLERANCE)
-    gap = abs(printed - tagged)
-    return gap if gap <= window else None
+    if printed is None or tagged is None:
+        return True  # Nothing to disagree about.
+    tagged = float(tagged)
+    window = max(0.5 * step * scale, abs(tagged) * _VALUE_TOLERANCE)
+    return abs(printed * scale - tagged) <= window
+
+
+def _within_reach(row: SoiAttributes, position, scale: float) -> float | None:
+    """How far a printed row sits from a position, if it could be that position.
+
+    Every figure the schedule prints has to agree, not just the fair value.
+    Three digits of precision leaves plenty of facilities sharing a fair value,
+    and requiring the cost and principal beside it to agree as well is what
+    separates a borrower's revolver from its term loan.
+    """
+    tagged = float(position.fair_value)
+    if tagged <= 0 or row.fair_value is None:
+        return None
+    if not _figure_matches(row.fair_value, row.fair_value_step, tagged, scale):
+        return None
+    if not _figure_matches(row.cost, row.cost_step, position.cost, scale):
+        return None
+    if not _figure_matches(row.principal, row.principal_step, position.principal, scale):
+        return None
+    return abs(row.fair_value * scale - tagged)
 
 
 def _disagree(left: SoiAttributes, right: SoiAttributes) -> bool:
@@ -516,11 +545,8 @@ def _pair_on_value(rows: list[SoiAttributes], positions: list, scale: float) -> 
     candidates = []
     reachable: dict[int, list[int]] = {}
     for position_index, position in enumerate(positions):
-        tagged = float(position.fair_value)
-        if tagged <= 0:
-            continue
         for row_index, row in priced:
-            gap = _within_reach(row, tagged, scale)
+            gap = _within_reach(row, position, scale)
             if gap is not None:
                 candidates.append((gap, row_index, position_index))
                 reachable.setdefault(position_index, []).append(row_index)
