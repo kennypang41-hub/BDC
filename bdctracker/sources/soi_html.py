@@ -456,18 +456,28 @@ _SCALES = (1.0, 1e3, 1e6)
 _VALUE_TOLERANCE = 0.001
 
 
-def _scale_between(printed: list[float], tagged: list[float]) -> float | None:
-    """How many dollars one printed unit is worth, or None if nothing lines up."""
-    if not printed or not tagged:
-        return None
-    top_printed, top_tagged = max(printed), max(tagged)
-    if top_printed <= 0 or top_tagged <= 0:
-        return None
-    ratio = top_tagged / top_printed
-    best = min(_SCALES, key=lambda scale: abs(ratio / scale - 1.0))
-    # A ratio nowhere near a plausible scale means these are different sets of
-    # holdings, not the same ones stated differently.
-    return best if abs(ratio / best - 1.0) <= 0.05 else None
+def _choose_scale(pairs_by_issuer) -> float | None:
+    """Pick the scale the whole schedule is stated in, by what it matches.
+
+    A schedule states every figure in the same unit, so the scale is a property
+    of the filing and inferring it per borrower is what broke Ares: comparing
+    the largest printed figure for one borrower against the largest tagged one
+    fails whenever the tagging carries a tranche the parse did not reach, and
+    the borrower is then skipped entirely rather than matched.
+
+    Each candidate is scored on how many positions it actually matches across
+    the filing, and the best wins. That is the quantity the scale exists to
+    serve, and a wrong scale matches almost nothing.
+    """
+    best, best_count = None, 0
+    for scale in _SCALES:
+        count = sum(
+            len(_pair_on_value(rows, holdings, scale))
+            for rows, holdings in pairs_by_issuer
+        )
+        if count > best_count:
+            best, best_count = scale, count
+    return best
 
 
 def _within_reach(row: SoiAttributes, tagged: float, scale: float) -> float | None:
@@ -546,6 +556,12 @@ def enrich(positions, index: dict) -> int:
     for position in positions:
         grouped.setdefault(position.issuer_id, []).append(position)
 
+    # One scale for the whole schedule, chosen before any of it is applied.
+    scale = _choose_scale([
+        (by_issuer[issuer_id], [p for p in holdings if p.fair_value is not None])
+        for issuer_id, holdings in grouped.items() if issuer_id in by_issuer
+    ])
+
     filled = 0
     for issuer_id, holdings in grouped.items():
         rows = by_issuer.get(issuer_id)
@@ -565,12 +581,8 @@ def enrich(positions, index: dict) -> int:
                 position.country = country
                 touched.add(id(position))
 
-        priced = [p for p in holdings if p.fair_value is not None]
-        scale = _scale_between(
-            [r.fair_value for r in rows if r.fair_value is not None],
-            [float(p.fair_value) for p in priced],
-        )
         if scale is not None:
+            priced = [p for p in holdings if p.fair_value is not None]
             for row, position in _pair_on_value(rows, priced, scale):
                 if position.maturity_date is None and row.maturity_date:
                     position.maturity_date = row.maturity_date

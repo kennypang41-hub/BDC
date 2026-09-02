@@ -479,3 +479,41 @@ def test_two_rows_that_would_date_a_position_differently_date_it_not_at_all():
     assert position.maturity_date is None
     # The borrower's sector is not in doubt, so it is still filled.
     assert position.industry == "Software"
+
+
+def test_the_scale_survives_a_borrower_whose_equity_is_not_in_the_parse():
+    """Inferring the scale per borrower skipped exactly these borrowers.
+
+    The schedule prices the loan; the XBRL also tags an equity stake several
+    times larger. Comparing the two largest figures for that borrower alone
+    yields no plausible scale, and the borrower was dropped whole — which is why
+    Ares matched a fifth of what it parsed.
+    """
+    index = soi_html.build_index(soi_html.parse_table(millions_schedule()))
+    loan = _position("Hyphen Solutions, LLC, First Lien Term Loan",
+                     fair_value="11847000", principal="11900000")
+    equity = _position("Hyphen Solutions, LLC, Common Equity",
+                       fair_value="80000000", principal="0")
+
+    assert soi_html.enrich([loan, equity], index) >= 1
+    assert loan.acquisition_date == date(2025, 8, 1)
+    assert loan.maturity_date == date(2032, 8, 1)
+    # Nothing in the schedule priced the equity, so it keeps no dates.
+    assert equity.acquisition_date is None
+
+
+def test_the_scale_is_chosen_once_for_the_whole_schedule():
+    """A borrower the parse covers fully must not set a scale of its own."""
+    index = soi_html.build_index(soi_html.parse_table(millions_schedule()))
+    positions = [
+        _position("Hyphen Solutions, LLC, First Lien Term Loan",
+                  fair_value="11847000", principal="11900000"),
+        _position("Icefall Parent, Inc., First Lien Term Loan",
+                  fair_value="1610000", principal="1600000"),
+        _position("Anaplan, Inc., First Lien Term Loan",
+                  fair_value="39680000", principal="40200000"),
+    ]
+    soi_html.enrich(positions, index)
+    assert [p.acquisition_date for p in positions] == [
+        date(2025, 8, 1), date(2024, 1, 1), date(2022, 6, 1),
+    ]
