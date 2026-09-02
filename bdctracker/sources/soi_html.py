@@ -371,11 +371,45 @@ def parse_tables(tables) -> list[SoiAttributes]:
             if carried is None:
                 continue
             continuation = read_rows(table, carried, skip=0)
-            if len(continuation) >= _MIN_SCHEDULE_ROWS:
+            if _is_a_page_of_the_schedule(continuation, carried):
                 rows.extend(continuation)
         except Exception as exc:
             log.debug("table skipped: %s", exc)
     return rows
+
+
+#: A carried header describes holdings, so the rows under it must describe some.
+#: Below this share carrying an attribute, the table is something else that
+#: happens to name things and price them.
+_DESCRIBED_SHARE = 0.5
+
+
+def _is_a_page_of_the_schedule(rows: list[SoiAttributes], columns: dict[str, int]) -> bool:
+    """Decide whether a headerless table is another page of the same schedule.
+
+    A schedule page says something about each holding beyond its price. Main
+    Street's fair-value rollforward does not: it names an asset class, prices
+    it, and leaves every descriptive column empty — so read against a carried
+    header it yields borrowers called "Debt" and "Equity". Requiring most rows
+    to carry an attribute the header promised separates the two.
+    """
+    if len(rows) < _MIN_SCHEDULE_ROWS:
+        return False
+    promised = [f for f in ("maturity", "acquisition", "instrument", "industry")
+                if f in columns]
+    if not promised:
+        return False
+
+    def described(row: SoiAttributes) -> bool:
+        return any((
+            "maturity" in promised and row.maturity_date is not None,
+            "acquisition" in promised and row.acquisition_date is not None,
+            "industry" in promised and row.industry is not None,
+            # instrument falls back to the issuer, so it only counts when it differs.
+            "instrument" in promised and row.instrument not in (None, row.issuer),
+        ))
+
+    return sum(described(row) for row in rows) >= len(rows) * _DESCRIBED_SHARE
 
 
 def build_index(rows: list[SoiAttributes]) -> dict:

@@ -384,3 +384,27 @@ def test_a_continuation_page_is_not_carried_into_the_exhibit_index():
 
 def test_nothing_is_carried_before_a_header_is_ever_found():
     assert soi_html.parse_tables([continuation_page()]) == []
+
+
+def fair_value_rollforward() -> FakeTable:
+    """Main Street's hierarchy rollforward: asset classes, priced, undescribed."""
+    return FakeTable(
+        headers=[],
+        rows=[
+            _row("Debt", "", "", "", "", "", "391,204"),
+            _row("Equity", "", "", "", "", "", "(16,810)"),
+            _row("Equity Warrant", "", "", "", "", "", "1,204"),
+            _row("Debt", "", "", "", "", "", "402,881"),
+        ],
+    )
+
+
+def test_a_priced_table_with_no_description_is_not_a_schedule_page():
+    """It names things and prices them, and says nothing about any holding."""
+    rows = soi_html.parse_tables([schedule(), fair_value_rollforward()])
+    issuers = {r.issuer for r in rows}
+    assert "Debt" not in issuers
+    assert "Equity" not in issuers
+    assert "Equity Warrant" not in issuers
+    # The real schedule ahead of it is untouched.
+    assert "Acme Holdings, LLC" in issuers
