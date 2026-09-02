@@ -312,7 +312,15 @@ def harvest_company(
 
 
 def _enrich_from_schedule(filing, collected: list[Position], cik: int) -> None:
-    """Fill the attributes the tagging omits from the rendered schedule."""
+    """Fill the attributes the tagging omits from the rendered schedule.
+
+    Matched against merged positions, not raw ones. The schedule prints one row
+    per facility and the XBRL tags each facility several times over — Ares tags
+    2,929 facts behind 1,078 printed rows — so a raw position carries a fraction
+    of the value its row states and matching on value finds almost nothing.
+    Merging first puts the two sides on the same footing. The merge runs again
+    in the pipeline over every filing at once, where it is a no-op for these.
+    """
     from bdctracker.sources import soi_html
 
     accession = getattr(filing, "accession_no", None)
@@ -326,6 +334,10 @@ def _enrich_from_schedule(filing, collected: list[Position], cik: int) -> None:
         return
     if not rows:
         return
-    filled = soi_html.enrich(fresh, soi_html.build_index(rows))
-    log.info("%s %s: schedule filled %s of %s positions from %s printed rows",
-             cik, accession, filled, len(fresh), len(rows))
+
+    merged = normalize.merge_within_filing(fresh)
+    filled = soi_html.enrich(merged, soi_html.build_index(rows))
+    collected[:] = [p for p in collected if p.accession != accession] + merged
+    log.info("%s %s: schedule filled %s of %s merged positions (%s raw) "
+             "from %s printed rows",
+             cik, accession, filled, len(merged), len(fresh), len(rows))

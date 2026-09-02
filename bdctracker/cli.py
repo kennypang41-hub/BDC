@@ -327,17 +327,23 @@ def _report_match(filing, bdc, rows, soi_html) -> None:
     """Show where the parsed rows and the tagged positions fail to meet."""
     from bdctracker.sources import xbrl as xbrl_source
 
-    positions = xbrl_source.positions_from_xbrl(
+    from bdctracker import normalize
+
+    raw = xbrl_source.positions_from_xbrl(
         filing.xbrl(), bdc.cik, accession=getattr(filing, "accession_no", None),
     )
-    if not positions:
+    if not raw:
         console.print("  [yellow]no tagged positions to match against[/yellow]")
         return
 
+    # Merged, because that is what the harvest matches against: reporting the
+    # raw count made the parse look like it covered a third of the schedule.
+    positions = normalize.merge_within_filing(raw)
     report = soi_html.match_report(positions, soi_html.build_index(rows))
     total = report["positions"] or 1
     console.print(f"  [bold]join[/bold] scale={report['scale']!r} "
-                  f"parsed_rows={report['parsed_rows']:,} positions={total:,}")
+                  f"parsed_rows={report['parsed_rows']:,} positions={total:,} "
+                  f"(merged from {len(raw):,} raw)")
     for key in ("matched", "borrower_not_in_schedule", "position_unpriced",
                 "no_row_within_reach", "ambiguous"):
         console.print(f"    {key:26} {report[key]:6,}  ({100 * report[key] / total:5.1f}%)")
