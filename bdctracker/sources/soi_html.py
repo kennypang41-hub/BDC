@@ -71,6 +71,8 @@ class SoiAttributes:
     acquisition_date: date | None = None
     instrument: str | None = None
     fair_value: float | None = None
+    #: The unit the fair value was printed to, in the schedule's own scale.
+    fair_value_step: float = 1.0
 
     @property
     def issuer_id(self) -> str:
@@ -194,6 +196,17 @@ def _near(values: list[str], index: int | None, match=None) -> str | None:
 
 def _to_number(text: str | None) -> float | None:
     """Read a printed figure, which may carry a currency symbol or parentheses."""
+    parsed = _to_number_and_step(text)
+    return None if parsed is None else parsed[0]
+
+
+def _to_number_and_step(text: str | None) -> tuple[float, float] | None:
+    """The figure, and the unit it was printed to.
+
+    A schedule stated in millions to one decimal prints an $11,847,000 holding
+    as 11.8, so what the figure asserts is a range half a step wide. Matching it
+    to a tagged value needs that step, not a fixed tolerance.
+    """
     if not text:
         return None
     cleaned = text.strip().replace(",", "").lstrip("$€£").strip()
@@ -203,7 +216,8 @@ def _to_number(text: str | None) -> float | None:
         value = float(cleaned)
     except ValueError:
         return None
-    return -value if negative else value
+    decimals = len(cleaned.partition(".")[2])
+    return (-value if negative else value), 10.0 ** -decimals
 
 
 def _is_section_heading(values: list[str]) -> str | None:
@@ -279,6 +293,14 @@ def parse_table(table) -> list[SoiAttributes]:
     return read_rows(table, columns, skip, width=len(headers))
 
 
+def _priced(text: str | None) -> dict:
+    """The fair value and its printed unit, as keyword arguments."""
+    parsed = _to_number_and_step(text)
+    if parsed is None:
+        return {}
+    return {"fair_value": parsed[0], "fair_value_step": parsed[1]}
+
+
 def read_rows(table, columns: dict[str, int], skip: int, width: int = 0) -> list[SoiAttributes]:
     """Read a table's rows against a known column layout."""
     width = max(width, max(columns.values()) + 1)
@@ -315,7 +337,7 @@ def read_rows(table, columns: dict[str, int], skip: int, width: int = 0) -> list
                 or normalize.maturity_from_label(value("maturity")),
                 acquisition_date=normalize.to_date(value("acquisition")),
                 instrument=value("instrument") or issuer,
-                fair_value=_to_number(_near(values, columns.get("fair_value"), _NUMERIC)),
+                **_priced(_near(values, columns.get("fair_value"), _NUMERIC)),
             )
         )
 
@@ -430,9 +452,7 @@ def build_index(rows: list[SoiAttributes]) -> dict:
 #: them in dollars. The ratio between the two is one of these.
 _SCALES = (1.0, 1e3, 1e6)
 
-#: How far two figures may differ and still be the same position. Printed
-#: values are rounded to the scale they are stated in, so a $1,234,567 holding
-#: prints as 1,235 — a relative gap of up to half the last printed digit.
+#: A floor under the tolerance, for the rounding the tagged side does too.
 _VALUE_TOLERANCE = 0.001
 
 
@@ -450,27 +470,50 @@ def _scale_between(printed: list[float], tagged: list[float]) -> float | None:
     return best if abs(ratio / best - 1.0) <= 0.05 else None
 
 
+def _within_reach(row: SoiAttributes, tagged: float, scale: float) -> float | None:
+    """How far a printed row sits from a tagged value, if close enough to be it.
+
+    The window is set by what the figure was printed to, not by a fixed
+    percentage: Ares states millions to one decimal, so 11.8 asserts only that
+    the holding lies between 11.75m and 11.85m, and demanding a tenth of a
+    percent rejects every row it should match. Blackstone states thousands to
+    the unit, where the same rule is far tighter.
+    """
+    printed = row.fair_value * scale
+    window = max(0.5 * row.fair_value_step * scale, abs(tagged) * _VALUE_TOLERANCE)
+    gap = abs(printed - tagged)
+    return gap if gap <= window else None
+
+
+def _disagree(left: SoiAttributes, right: SoiAttributes) -> bool:
+    """Whether two rows would fill the dates differently."""
+    return (left.maturity_date != right.maturity_date
+            or left.acquisition_date != right.acquisition_date)
+
+
 def _pair_on_value(rows: list[SoiAttributes], positions: list, scale: float) -> list[tuple]:
     """Match printed rows to tagged positions by the value each one carries.
 
     A borrower may hold several facilities and the printed schedule names them
-    inconsistently, so the value is the reliable key: within one borrower, two
-    facilities priced identically are rare, and where they occur either row
-    carries the same attributes anyway. Matching runs closest-first so a clear
-    pair is never displaced by an ambiguous one.
+    inconsistently, so the value is the key. Matching runs closest-first, so a
+    clear pair is never displaced by a marginal one.
+
+    Where a coarse printed scale leaves two rows equally able to be the same
+    position and they would date it differently, neither is used. A blank date
+    is a smaller error than a confident wrong one.
     """
+    priced = [(index, row) for index, row in enumerate(rows) if row.fair_value is not None]
     candidates = []
-    for row_index, row in enumerate(rows):
-        if row.fair_value is None:
+    reachable: dict[int, list[int]] = {}
+    for position_index, position in enumerate(positions):
+        tagged = float(position.fair_value)
+        if tagged <= 0:
             continue
-        printed = row.fair_value * scale
-        for position_index, position in enumerate(positions):
-            tagged = float(position.fair_value)
-            if tagged <= 0:
-                continue
-            gap = abs(printed - tagged) / tagged
-            if gap <= _VALUE_TOLERANCE:
+        for row_index, row in priced:
+            gap = _within_reach(row, tagged, scale)
+            if gap is not None:
                 candidates.append((gap, row_index, position_index))
+                reachable.setdefault(position_index, []).append(row_index)
 
     candidates.sort()
     used_rows: set[int] = set()
@@ -478,6 +521,10 @@ def _pair_on_value(rows: list[SoiAttributes], positions: list, scale: float) -> 
     pairs = []
     for _, row_index, position_index in candidates:
         if row_index in used_rows or position_index in used_positions:
+            continue
+        rivals = reachable.get(position_index, ())
+        if any(other != row_index and _disagree(rows[other], rows[row_index])
+               for other in rivals):
             continue
         used_rows.add(row_index)
         used_positions.add(position_index)

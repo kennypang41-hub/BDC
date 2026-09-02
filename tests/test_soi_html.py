@@ -408,3 +408,74 @@ def test_a_priced_table_with_no_description_is_not_a_schedule_page():
     assert "Equity Warrant" not in issuers
     # The real schedule ahead of it is untouched.
     assert "Acme Holdings, LLC" in issuers
+
+
+# ---------------------------------------------------------------------------
+# Matching a schedule stated coarsely
+# ---------------------------------------------------------------------------
+
+def millions_schedule() -> FakeTable:
+    """Ares states millions to one decimal, so 11.8 means 11.75m to 11.85m."""
+    return FakeTable(
+        headers=HEADERS,
+        rows=[
+            _row("Software", "", "", "", "", "", "", spans=[7, 1, 1, 1, 1, 1, 1]),
+            _row("Hyphen Solutions, LLC", "First Lien Term Loan", "08/2025",
+                 "08/2032", "11.9", "11.9", "11.8"),
+            _row("Icefall Parent, Inc.", "First Lien Term Loan", "01/2024",
+                 "01/2030", "1.6", "1.6", "1.6"),
+            _row("Anaplan, Inc.", "First Lien Term Loan", "06/2022",
+                 "06/2029", "40.2", "40.0", "39.7"),
+        ],
+    )
+
+
+def test_a_schedule_in_millions_matches_the_tagged_dollar_amount():
+    """11.8 must reach 11,847,000 — a fixed tenth of a percent never would."""
+    index = soi_html.build_index(soi_html.parse_table(millions_schedule()))
+    position = _position("Hyphen Solutions, LLC, First Lien Term Loan",
+                         fair_value="11847000", principal="11900000")
+
+    assert soi_html.enrich([position], index) == 1
+    assert position.acquisition_date == date(2025, 8, 1)
+    assert position.maturity_date == date(2032, 8, 1)
+
+
+def test_a_value_outside_the_printed_window_is_not_matched():
+    """11.8 cannot be 12.4m; the window is half a step, not any near miss."""
+    index = soi_html.build_index(soi_html.parse_table(millions_schedule()))
+    position = _position("Hyphen Solutions, LLC, Delayed Draw",
+                         fair_value="12400000", principal="12500000")
+
+    soi_html.enrich([position], index)
+    assert position.acquisition_date is None
+    assert position.maturity_date is None
+
+
+def ambiguous_schedule() -> FakeTable:
+    """Two facilities of one borrower, printed identically, dated differently."""
+    return FakeTable(
+        headers=HEADERS,
+        rows=[
+            _row("Software", "", "", "", "", "", "", spans=[7, 1, 1, 1, 1, 1, 1]),
+            _row("Twin Facilities Inc.", "First Lien Term Loan", "01/2020",
+                 "01/2027", "5.0", "5.0", "5.0"),
+            _row("Twin Facilities Inc.", "Delayed Draw Term Loan", "06/2024",
+                 "06/2031", "5.0", "5.0", "5.0"),
+            _row("Other Borrower LLC", "First Lien Term Loan", "03/2021",
+                 "03/2028", "9.0", "9.0", "8.9"),
+        ],
+    )
+
+
+def test_two_rows_that_would_date_a_position_differently_date_it_not_at_all():
+    """A blank date beats a confident wrong one."""
+    index = soi_html.build_index(soi_html.parse_table(ambiguous_schedule()))
+    position = _position("Twin Facilities Inc., First Lien Term Loan",
+                         fair_value="5000000", principal="5000000")
+
+    soi_html.enrich([position], index)
+    assert position.acquisition_date is None
+    assert position.maturity_date is None
+    # The borrower's sector is not in doubt, so it is still filled.
+    assert position.industry == "Software"
