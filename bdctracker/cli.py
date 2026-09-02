@@ -319,50 +319,71 @@ def schedule(
 
 
 def _dump_tables(filing, soi_html, limit: int = 4) -> None:
-    """Show what each table looks like, so a failed match can be explained."""
+    """Show the tables the parse actually reads, and what it found in them.
+
+    Ordered by rows produced rather than rows present: a filing's biggest table
+    is often the cash flow statement, and the question worth answering is which
+    table the borrowers came out of and which columns were located in it.
+    """
     from edgar.documents import parse_html
 
     document = parse_html(filing.html())
     tables = list(document.tables)
     console.print(f"  [dim]{len(tables)} tables in the document[/dim]")
-    # The schedule is the largest table in the filing by a wide margin, so look
-    # at the biggest ones rather than the first ones.
-    biggest = sorted(
-        enumerate(tables), key=lambda pair: len(getattr(pair[1], "rows", [])), reverse=True
-    )[:limit]
-    for index, table in biggest:
-        headers, columns, skip = soi_html.locate_header(table)
-        rows = list(getattr(table, "rows", []))
-        console.print(
-            f"  [cyan]table {index}[/cyan] rows={len(rows)} "
-            f"declared_headers={len(getattr(table, 'headers', []) or [])} skip={skip}"
-        )
-        if headers:
-            console.print(f"    header: {headers[:12]}")
-        elif rows:
-            console.print(f"    row 0:  {[soi_html.cell_text(c) for c in rows[0].cells][:12]}")
-        console.print(f"    columns: {columns}")
 
-        # The classification is only half the story: show the rows it is being
-        # applied to, and why each one was kept or dropped.
-        for offset, row in enumerate(rows[skip : skip + 4]):
-            cells = [soi_html.cell_text(c) for c in row.cells]
-            spans = [getattr(c, "colspan", 1) for c in row.cells]
+    seen = []
+    carried = None
+    for index, table in enumerate(tables):
+        try:
+            headers, columns, skip = soi_html.locate_header(table)
+            headed = soi_html.is_schedule_of_investments(columns)
+            if headed:
+                carried = columns
+                produced = soi_html.read_rows(table, columns, skip, width=len(headers))
+            elif carried:
+                columns, skip = carried, 0
+                produced = soi_html.read_rows(table, carried, skip=0)
+                produced = produced if len(produced) >= soi_html._MIN_SCHEDULE_ROWS else []
+            else:
+                produced = []
+        except Exception as exc:
+            console.print(f"  [red]table {index} raised {exc}[/red]")
+            continue
+        if produced:
+            seen.append((len(produced), index, headers, columns, headed, skip, table, produced))
+
+    if not seen:
+        console.print("  [yellow]no table produced any rows[/yellow]")
+        return
+
+    console.print(f"  [dim]{len(seen)} tables produced rows[/dim]")
+    for count, index, headers, columns, headed, skip, table, produced in sorted(
+        seen, reverse=True, key=lambda entry: entry[0]
+    )[:limit]:
+        origin = "own header" if headed else "carried header"
+        console.print(
+            f"  [cyan]table {index}[/cyan] produced={count} ({origin}) skip={skip}"
+        )
+        console.print(f"    columns: {columns}")
+        missing = [f for f in ("acquisition", "maturity", "industry", "country")
+                   if f not in columns]
+        if missing:
+            console.print(f"    [yellow]no column found for: {', '.join(missing)}[/yellow]")
+        if headers:
+            console.print(f"    header: {[h for h in headers if h][:16]}")
+        rows = list(getattr(table, "rows", []))
+        for offset, row in enumerate(rows[skip : skip + 3]):
             expanded: list[str] = []
-            for text, span in zip(cells, spans):
-                expanded.append(text)
-                expanded.extend([""] * (span - 1))
-            filled = [(i, t) for i, t in enumerate(expanded) if t][:14]
-            console.print(f"      row {offset}: {filled}")
-            issuer = soi_html._near(expanded, columns.get("issuer"))
-            priced = [
-                (f, soi_html._near(expanded, columns.get(f), soi_html._NUMERIC))
-                for f in ("fair_value", "cost", "principal")
-            ]
-            console.print(
-                f"        issuer={issuer!r} borrower_ok="
-                f"{soi_html.looks_like_a_borrower(issuer or '')} priced={priced}"
-            )
+            for cell in row.cells:
+                expanded.append(soi_html.cell_text(cell))
+                expanded.extend([""] * (max(1, getattr(cell, "colspan", 1)) - 1))
+            console.print(f"      row {offset}: {[(i, t) for i, t in enumerate(expanded) if t][:16]}")
+        sample = produced[0]
+        console.print(
+            f"    first parsed: issuer={sample.issuer!r} sector={sample.industry!r} "
+            f"maturity={sample.maturity_date} acquired={sample.acquisition_date} "
+            f"fv={sample.fair_value}"
+        )
 
 
 @app.command()
