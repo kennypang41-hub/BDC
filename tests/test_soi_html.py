@@ -329,3 +329,58 @@ def test_a_table_yielding_only_a_row_or_two_is_discarded():
         ],
     )
     assert soi_html.parse_table(table) == []
+
+
+# ---------------------------------------------------------------------------
+# A schedule that runs over a page break
+# ---------------------------------------------------------------------------
+
+def continuation_page() -> FakeTable:
+    """The next page of the same schedule: rows, no headings, same columns."""
+    return FakeTable(
+        headers=[],
+        rows=[
+            _row("Gamma Systems Corp.", "First Lien Term Loan", "7/1/2022",
+                 "9/30/2030", "8,000", "7,900", "7,750"),
+            _row("Delta Freight LLC", "First Lien Term Loan", "2/14/2023",
+                 "2/14/2031", "3,000", "2,980", "2,900"),
+            _row("Epsilon Foods Inc.", "Second Lien Term Loan", "11/2/2020",
+                 "11/2/2028", "6,000", "5,900", "4,100"),
+        ],
+    )
+
+
+def unrelated_table() -> FakeTable:
+    """The exhibit index, which follows the schedule and names things too."""
+    return FakeTable(
+        headers=[],
+        rows=[
+            _row("3.1", "Articles of Amendment and Restatement", "", "", "", "", ""),
+            _row("4.1", "Sixth Supplemental Indenture, dated May 2026", "", "", "", "", ""),
+            _row("10.2", "Amendment No. 4 to the Credit Agreement", "", "", "", "", ""),
+        ],
+    )
+
+
+def test_a_second_page_is_read_against_the_first_pages_header():
+    """Only the first page repeats the headings; the rest are the same table."""
+    rows = soi_html.parse_tables([schedule(), continuation_page()])
+    issuers = [r.issuer for r in rows]
+    assert "Gamma Systems Corp." in issuers
+    assert "Epsilon Foods Inc." in issuers
+
+    gamma = next(r for r in rows if r.issuer == "Gamma Systems Corp.")
+    assert gamma.acquisition_date == date(2022, 7, 1)
+    assert gamma.maturity_date == date(2030, 9, 30)
+    assert gamma.fair_value == 7750
+
+
+def test_a_continuation_page_is_not_carried_into_the_exhibit_index():
+    """Carrying a header forward must not turn every later table into holdings."""
+    rows = soi_html.parse_tables([schedule(), unrelated_table()])
+    assert not any(r.issuer.startswith(("3.1", "4.1", "10.2")) for r in rows)
+    assert all("Indenture" not in r.issuer for r in rows)
+
+
+def test_nothing_is_carried_before_a_header_is_ever_found():
+    assert soi_html.parse_tables([continuation_page()]) == []

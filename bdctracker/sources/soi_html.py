@@ -276,8 +276,12 @@ def parse_table(table) -> list[SoiAttributes]:
     headers, columns, skip = locate_header(table)
     if not is_schedule_of_investments(columns):
         return []
+    return read_rows(table, columns, skip, width=len(headers))
 
-    width = max(len(headers), max(columns.values()) + 1)
+
+def read_rows(table, columns: dict[str, int], skip: int, width: int = 0) -> list[SoiAttributes]:
+    """Read a table's rows against a known column layout."""
+    width = max(width, max(columns.values()) + 1)
     out: list[SoiAttributes] = []
     section: str | None = None
 
@@ -338,10 +342,37 @@ def parse_filing(filing) -> list[SoiAttributes]:
         log.warning("could not parse HTML for %s: %s", getattr(filing, "accession_no", "?"), exc)
         return []
 
+    return parse_tables(document.tables)
+
+
+def parse_tables(tables) -> list[SoiAttributes]:
+    """Parse a document's schedule, including the pages that carry no header.
+
+    A schedule long enough to run over a page break is emitted as a run of
+    tables, and only the first of them repeats the column headings — which is
+    why Ares parses eleven hundred borrowers and not one acquisition date. So
+    the layout found on a headed table is carried forward, and a later table is
+    read against it when doing so yields a run of priced borrower rows. The
+    guards that keep the balance sheet out do the work here too: a row must
+    name something that reads as a borrower and put a figure under a priced
+    column, and a table must yield several such rows to count as a schedule
+    page at all.
+    """
     rows: list[SoiAttributes] = []
-    for table in document.tables:
+    carried: dict[str, int] | None = None
+
+    for table in tables:
         try:
-            rows.extend(parse_table(table))
+            headers, columns, skip = locate_header(table)
+            if is_schedule_of_investments(columns):
+                carried = columns
+                rows.extend(read_rows(table, columns, skip, width=len(headers)))
+                continue
+            if carried is None:
+                continue
+            continuation = read_rows(table, carried, skip=0)
+            if len(continuation) >= _MIN_SCHEDULE_ROWS:
+                rows.extend(continuation)
         except Exception as exc:
             log.debug("table skipped: %s", exc)
     return rows
