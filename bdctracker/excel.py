@@ -46,6 +46,9 @@ MARK_COLUMNS: list[tuple[str, str | None, str | None, int]] = [
     ("Principal ccy",         "principal_ccy",     None,          13),
     ("Fair value ccy",        "fair_value_ccy",    None,          14),
     ("Principal",             "principal",         MONEY,         16),
+    ("Principal (USD)",       "principal_usd",     MONEY,         16),
+    ("FX rate",               "fx_rate",           "0.0000",      10),
+    ("FX date",               "fx_date",           None,          11),
     ("Cost",                  "cost",              MONEY,         16),
     ("Fair value",            "fair_value",        MONEY,         16),
     ("Mark basis (fallback)", "mark_basis",        MONEY,         16),
@@ -108,12 +111,17 @@ SELECT
     l.investment_type, l.lien, l.facility,
     COALESCE(m.industry, a.industry) AS industry, l.currency,
     m.principal, m.cost, m.fair_value, m.shares, m.principal_ccy, m.fair_value_ccy,
+    m.principal_usd, m.fx_rate, m.fx_date,
     -- The denominator must share the numerator's currency, or the ratio is an
     -- exchange rate rather than a mark.
-    CASE WHEN m.principal > 0
+    -- Principal restated in USD where it needed restating; cost only where no
+    -- rate was available.
+    CASE WHEN COALESCE(m.principal_usd, 0) > 0 THEN m.principal_usd
+         WHEN m.principal > 0
               AND (m.principal_ccy IS NULL OR m.fair_value_ccy IS NULL
                    OR m.principal_ccy = m.fair_value_ccy)
-         THEN m.principal ELSE m.cost END AS mark_basis,
+         THEN m.principal
+         ELSE m.cost END AS mark_basis,
     m.interest_rate, m.spread, m.reference_rate, m.pik_rate, m.pct_net_assets,
     m.maturity_date,
     COALESCE(m.acquisition_date, a.acquisition_date) AS acquisition_date,
@@ -166,7 +174,7 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection,
 
     fair_value = _letter("Fair value")
     basis = _letter("Mark basis (fallback)")
-    principal = _letter("Principal")
+    principal_usd = _letter("Principal (USD)")
     cost = _letter("Cost")
     mark = _letter("Mark (% of principal)")
     unrealised = _letter("Unrealised")
@@ -192,11 +200,12 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection,
                     # Principal only when its currency matches the fair value's;
                     # Mark basis already encodes that test, so defer to it when
                     # the two differ.
+                    # Divide by the USD principal; the basis stands in only
+                    # where no rate was available and cost had to serve.
                     value = (
                         f"=IFERROR({fair_value}{row_number}"
-                        f"/IF(AND({principal}{row_number}>0,"
-                        f"{principal}{row_number}={basis}{row_number}),"
-                        f"{principal}{row_number},{basis}{row_number})*100,\"\")"
+                        f"/IF({principal_usd}{row_number}>0,"
+                        f"{principal_usd}{row_number},{basis}{row_number})*100,\"\")"
                     )
                 elif header == "Unrealised":
                     value = f"=IFERROR({fair_value}{row_number}-{cost}{row_number},\"\")"

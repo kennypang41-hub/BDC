@@ -241,15 +241,15 @@ def harvest_company(
     since: date | None = None,
     limit: int | None = None,
     with_nonaccrual: bool = True,
-    with_schedule: bool = False,
+    with_schedule: bool = True,
 ) -> list[Position]:
     """Walk a BDC's periodic filings and extract every tagged position.
 
     ``with_schedule`` additionally parses the printed Schedule of Investments to
     fill in sector, country, maturity and acquisition date, which the XBRL of
-    most filers does not carry at all. Off by default: see the module docstring
-    of :mod:`bdctracker.sources.soi_html` for what it does and does not yet
-    reach on real filings.
+    most filers does not carry at all. It costs one more request per filing and
+    reaches some layouts and not others — see the module docstring of
+    :mod:`bdctracker.sources.soi_html`.
     """
     configure_edgar()
     from edgar import Company

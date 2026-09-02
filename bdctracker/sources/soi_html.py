@@ -11,20 +11,15 @@ XBRL, which is unambiguous; matching a parsed row to a tagged position by
 borrower and facility is reliable enough to carry a sector, and not reliable
 enough to carry a valuation.
 
-**Status: works on the layouts it is tested against, not yet on real filings.**
-It is off by default in the harvest, and `bdc schedule --debug` is the way to
-work on it. Against Main Street's latest 10-Q it recognises the schedule's
-column layout correctly — issuer, instrument, maturity, principal, cost and
-fair value all classify — and still returns only the money-market holdings at
-the end of the schedule. The main body is split across dozens of page-sized
-tables of about forty rows each, and something in those rows is not lining up
-with the header the classifier found. `--debug` prints each row's populated
-cells with their indices, the borrower it resolved and which priced columns
-matched, which is the information needed to close the gap.
-
-Enabling it before that is resolved would fill a small number of positions and
-leave the rest untouched, which is not harmful but is not yet worth the request
-per filing.
+Coverage varies by how a filer lays the schedule out. Against Blackstone
+Secured Lending it parses about 1,370 rows a filing and carries an acquisition
+date on 99% of them, a maturity on 90% and a sector on all of them. Against
+Main Street it recognises the column layout and still returns only the
+money-market holdings at the end: that schedule is split across dozens of
+page-sized tables and its rows do not line up with the header found for them.
+So the parse fills what it can and leaves the rest to the tagging.
+`bdc schedule --debug` prints each table's header, its classification and each
+row's populated cells, which is how a filer that returns nothing gets diagnosed.
 """
 from __future__ import annotations
 
@@ -75,6 +70,7 @@ class SoiAttributes:
     maturity_date: date | None = None
     acquisition_date: date | None = None
     instrument: str | None = None
+    fair_value: float | None = None
 
     @property
     def issuer_id(self) -> str:
@@ -196,6 +192,20 @@ def _near(values: list[str], index: int | None, match=None) -> str | None:
     return None
 
 
+def _to_number(text: str | None) -> float | None:
+    """Read a printed figure, which may carry a currency symbol or parentheses."""
+    if not text:
+        return None
+    cleaned = text.strip().replace(",", "").lstrip("$€£").strip()
+    negative = cleaned.startswith("(") and cleaned.endswith(")")
+    cleaned = cleaned.strip("()")
+    try:
+        value = float(cleaned)
+    except ValueError:
+        return None
+    return -value if negative else value
+
+
 def _is_section_heading(values: list[str]) -> str | None:
     """A lone text cell in an otherwise empty row names the section it opens."""
     filled = [v for v in values if v]
@@ -301,6 +311,7 @@ def parse_table(table) -> list[SoiAttributes]:
                 or normalize.maturity_from_label(value("maturity")),
                 acquisition_date=normalize.to_date(value("acquisition")),
                 instrument=value("instrument") or issuer,
+                fair_value=_to_number(_near(values, columns.get("fair_value"), _NUMERIC)),
             )
         )
 
@@ -337,22 +348,76 @@ def parse_filing(filing) -> list[SoiAttributes]:
 
 
 def build_index(rows: list[SoiAttributes]) -> dict:
-    """Index attributes for lookup by borrower, and by borrower plus facility.
+    """Group parsed rows by borrower, which is how they are matched back.
 
-    Industry and country belong to the borrower, so a single match anywhere in
-    the schedule settles them. Maturity and acquisition date belong to the
-    facility, so they are only applied where the tranche also matches.
+    Industry and country belong to the borrower, so any row settles them.
+    Maturity and acquisition date belong to one facility, so they are matched
+    on the fair value printed beside them — see :func:`enrich`.
     """
-    by_issuer: dict[str, SoiAttributes] = {}
-    by_facility: dict[tuple[str, str], SoiAttributes] = {}
+    by_issuer: dict[str, list[SoiAttributes]] = {}
     for row in rows:
-        if not row.issuer:
+        if row.issuer:
+            by_issuer.setdefault(row.issuer_id, []).append(row)
+    return {"issuer": by_issuer}
+
+
+#: A printed schedule states figures in thousands or millions; the XBRL states
+#: them in dollars. The ratio between the two is one of these.
+_SCALES = (1.0, 1e3, 1e6)
+
+#: How far two figures may differ and still be the same position. Printed
+#: values are rounded to the scale they are stated in, so a $1,234,567 holding
+#: prints as 1,235 — a relative gap of up to half the last printed digit.
+_VALUE_TOLERANCE = 0.001
+
+
+def _scale_between(printed: list[float], tagged: list[float]) -> float | None:
+    """How many dollars one printed unit is worth, or None if nothing lines up."""
+    if not printed or not tagged:
+        return None
+    top_printed, top_tagged = max(printed), max(tagged)
+    if top_printed <= 0 or top_tagged <= 0:
+        return None
+    ratio = top_tagged / top_printed
+    best = min(_SCALES, key=lambda scale: abs(ratio / scale - 1.0))
+    # A ratio nowhere near a plausible scale means these are different sets of
+    # holdings, not the same ones stated differently.
+    return best if abs(ratio / best - 1.0) <= 0.05 else None
+
+
+def _pair_on_value(rows: list[SoiAttributes], positions: list, scale: float) -> list[tuple]:
+    """Match printed rows to tagged positions by the value each one carries.
+
+    A borrower may hold several facilities and the printed schedule names them
+    inconsistently, so the value is the reliable key: within one borrower, two
+    facilities priced identically are rare, and where they occur either row
+    carries the same attributes anyway. Matching runs closest-first so a clear
+    pair is never displaced by an ambiguous one.
+    """
+    candidates = []
+    for row_index, row in enumerate(rows):
+        if row.fair_value is None:
             continue
-        existing = by_issuer.get(row.issuer_id)
-        if existing is None or (existing.industry is None and row.industry):
-            by_issuer[row.issuer_id] = row
-        by_facility.setdefault((row.issuer_id, row.tranche), row)
-    return {"issuer": by_issuer, "facility": by_facility}
+        printed = row.fair_value * scale
+        for position_index, position in enumerate(positions):
+            tagged = float(position.fair_value)
+            if tagged <= 0:
+                continue
+            gap = abs(printed - tagged) / tagged
+            if gap <= _VALUE_TOLERANCE:
+                candidates.append((gap, row_index, position_index))
+
+    candidates.sort()
+    used_rows: set[int] = set()
+    used_positions: set[int] = set()
+    pairs = []
+    for _, row_index, position_index in candidates:
+        if row_index in used_rows or position_index in used_positions:
+            continue
+        used_rows.add(row_index)
+        used_positions.add(position_index)
+        pairs.append((rows[row_index], positions[position_index]))
+    return pairs
 
 
 def enrich(positions, index: dict) -> int:
@@ -361,31 +426,49 @@ def enrich(positions, index: dict) -> int:
     Only ever fills blanks: a tagged value is authoritative, and the parse is
     the fallback for what the tagging omits.
     """
-    filled = 0
     by_issuer = index.get("issuer", {})
-    by_facility = index.get("facility", {})
+    if not by_issuer:
+        return 0
 
+    grouped: dict[str, list] = {}
     for position in positions:
-        issuer_match = by_issuer.get(position.issuer_id)
-        facility_match = by_facility.get(
-            (position.issuer_id, identity.tranche_signature(position.tranche_text or ""))
+        grouped.setdefault(position.issuer_id, []).append(position)
+
+    filled = 0
+    for issuer_id, holdings in grouped.items():
+        rows = by_issuer.get(issuer_id)
+        if not rows:
+            continue
+
+        # Sector and country describe the borrower, so any row that names them
+        # applies to every holding in it.
+        industry = next((r.industry for r in rows if r.industry), None)
+        country = next((r.country for r in rows if r.country), None)
+        touched = set()
+        for position in holdings:
+            if industry and position.industry is None:
+                position.industry = industry
+                touched.add(id(position))
+            if country and position.country is None:
+                position.country = country
+                touched.add(id(position))
+
+        priced = [p for p in holdings if p.fair_value is not None]
+        scale = _scale_between(
+            [r.fair_value for r in rows if r.fair_value is not None],
+            [float(p.fair_value) for p in priced],
         )
-        touched = False
+        if scale is not None:
+            for row, position in _pair_on_value(rows, priced, scale):
+                if position.maturity_date is None and row.maturity_date:
+                    position.maturity_date = row.maturity_date
+                    touched.add(id(position))
+                if position.acquisition_date is None and row.acquisition_date:
+                    position.acquisition_date = row.acquisition_date
+                    touched.add(id(position))
 
-        if position.industry is None and issuer_match and issuer_match.industry:
-            position.industry = issuer_match.industry
-            touched = True
-        if position.country is None and issuer_match and issuer_match.country:
-            position.country = issuer_match.country
-            touched = True
-        if position.maturity_date is None and facility_match and facility_match.maturity_date:
-            position.maturity_date = facility_match.maturity_date
-            touched = True
-        if position.acquisition_date is None and facility_match and facility_match.acquisition_date:
-            position.acquisition_date = facility_match.acquisition_date
-            touched = True
-
-        if touched:
-            position.flags.append("enriched_from_schedule")
-            filled += 1
+        for position in holdings:
+            if id(position) in touched:
+                position.flags.append("enriched_from_schedule")
+                filled += 1
     return filled

@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS marks (
     country          TEXT,
     principal_ccy    TEXT,
     fair_value_ccy   TEXT,
+    principal_usd    REAL,
+    fx_rate          REAL,
+    fx_date          TEXT,
     fair_value_level TEXT,
     is_non_accrual   INTEGER,
     accession        TEXT,
@@ -240,7 +243,8 @@ def load_positions(conn: sqlite3.Connection, positions: Iterable[Position]) -> d
                 p.mark, None if unrealized is None else float(unrealized),
                 p.interest_rate, p.spread, p.reference_rate, p.pik_rate, p.pct_net_assets,
                 _iso(p.maturity_date), _iso(p.acquisition_date), p.industry, p.country,
-            p.principal_currency, p.fair_value_currency, p.fair_value_level,
+            p.principal_currency, p.fair_value_currency,
+            p.principal_usd, p.fx_rate, p.fx_date, p.fair_value_level,
                 None if p.is_non_accrual is None else int(p.is_non_accrual),
                 p.accession, p.form, _iso(p.filed_date), p.source, ",".join(p.flags),
             )
@@ -252,9 +256,10 @@ def load_positions(conn: sqlite3.Connection, positions: Iterable[Position]) -> d
             fair_value, cost, principal, shares, mark, unrealized,
             interest_rate, spread, reference_rate, pik_rate, pct_net_assets,
             maturity_date, acquisition_date, industry, country,
-            principal_ccy, fair_value_ccy, fair_value_level, is_non_accrual,
+            principal_ccy, fair_value_ccy, principal_usd, fx_rate, fx_date,
+            fair_value_level, is_non_accrual,
             accession, form, filed_date, source, flags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(loan_id, period_end) DO UPDATE SET
             fair_value=excluded.fair_value, cost=excluded.cost, principal=excluded.principal,
             shares=excluded.shares, mark=excluded.mark, unrealized=excluded.unrealized,
@@ -265,6 +270,9 @@ def load_positions(conn: sqlite3.Connection, positions: Iterable[Position]) -> d
             country=COALESCE(excluded.country, marks.country),
             principal_ccy=COALESCE(excluded.principal_ccy, marks.principal_ccy),
             fair_value_ccy=COALESCE(excluded.fair_value_ccy, marks.fair_value_ccy),
+            principal_usd=COALESCE(excluded.principal_usd, marks.principal_usd),
+            fx_rate=COALESCE(excluded.fx_rate, marks.fx_rate),
+            fx_date=COALESCE(excluded.fx_date, marks.fx_date),
             fair_value_level=excluded.fair_value_level,
             is_non_accrual=COALESCE(excluded.is_non_accrual, marks.is_non_accrual),
             accession=excluded.accession, form=excluded.form, filed_date=excluded.filed_date,

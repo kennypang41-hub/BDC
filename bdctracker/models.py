@@ -35,6 +35,12 @@ class Position:
     cost_currency: str | None = None
     principal_currency: str | None = None
 
+    #: Principal restated in USD, with the rate that did it. Filled by
+    #: :mod:`bdctracker.fx`; None where no rate was available.
+    principal_usd: float | None = None
+    fx_rate: float | None = None
+    fx_date: str | None = None
+
     interest_rate: float | None = None
     spread: float | None = None
     reference_rate: str | None = None
@@ -86,6 +92,9 @@ class Position:
         130. Cost is reported alongside fair value in USD, so it is the correct
         denominator whenever principal is not in the numerator's currency.
         """
+        # A converted principal is in the fair value's currency by construction.
+        if self.principal_usd and self.fair_value_currency in (None, "USD"):
+            return Decimal(str(self.principal_usd))
         if self.principal is not None and self.principal != 0 and self._matches(
             self.principal_currency
         ):

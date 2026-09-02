@@ -64,6 +64,11 @@ def harvest(
     limit_per_bdc: int = typer.Option(None, help="Cap filings per BDC; useful for a smoke test."),
     preflight: bool = typer.Option(True, "--preflight/--no-preflight",
                                    help="Probe sec.gov once before starting."),
+    schedule_parse: bool = typer.Option(
+        True, "--schedule/--no-schedule",
+        help="Also parse the printed Schedule of Investments for sector, "
+             "country, maturity and acquisition date.",
+    ),
     db_path: Path = typer.Option(None, help="SQLite file to write (default data/bdc.db)."),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
@@ -81,10 +86,8 @@ def harvest(
             workers=workers,
             limit_per_bdc=limit_per_bdc,
             preflight=preflight,
+            with_schedule=schedule_parse,
         )
-    except SecUnreachable as exc:
-        console.print(f"[red]Cannot reach the SEC.[/red] {exc}")
-        raise typer.Exit(3) from None
     except SecUnreachable as exc:
         console.print(f"[red]Cannot reach the SEC.[/red] {exc}")
         raise typer.Exit(3) from None

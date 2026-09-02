@@ -115,10 +115,12 @@ def test_a_table_that_is_not_a_schedule_yields_nothing():
 # Enrichment
 # ---------------------------------------------------------------------------
 
-def _position(identifier, **kwargs):
+def _position(identifier, fair_value="9800000", principal="10000000", **kwargs):
+    """A tagged position, priced in dollars against a schedule in thousands."""
     return normalize.finalize(Position(
         cik=1396440, period_end=date(2026, 6, 30), identifier=identifier,
-        fair_value=Decimal("9800"), principal=Decimal("10000"), source="xbrl", **kwargs,
+        fair_value=Decimal(fair_value), principal=Decimal(principal),
+        source="xbrl", **kwargs,
     ))
 
 
@@ -147,11 +149,41 @@ def test_enrichment_never_overwrites_a_tagged_value():
 
 
 def test_maturity_follows_the_facility_not_just_the_borrower():
-    """Acme's revolver matures two years before its term loan."""
+    """Acme's revolver matures two years before its term loan.
+
+    Both are tagged under the same borrower and the schedule names facilities
+    inconsistently, so the fair value beside each printed row is what tells the
+    revolver from the term loan.
+    """
     index = soi_html.build_index(soi_html.parse_table(schedule()))
-    revolver = _position("Acme Holdings, LLC, Revolver")
-    soi_html.enrich([revolver], index)
+    revolver = _position("Acme Holdings, LLC, Revolver",
+                         fair_value="980000", principal="1000000")
+    term_loan = _position("Acme Holdings, LLC, First Lien Term Loan")
+
+    soi_html.enrich([revolver, term_loan], index)
     assert revolver.maturity_date == date(2028, 6, 30)
+    assert term_loan.maturity_date == date(2029, 6, 30)
+
+
+def test_a_facility_the_schedule_does_not_price_keeps_its_sector():
+    """No value to match on costs the dates, not the borrower's attributes."""
+    index = soi_html.build_index(soi_html.parse_table(schedule()))
+    position = _position("Acme Holdings, LLC, Delayed Draw", fair_value="4242424")
+
+    assert soi_html.enrich([position], index) == 1
+    assert position.industry == "Software"
+    assert position.maturity_date is None
+    assert position.acquisition_date is None
+
+
+def test_a_schedule_stated_in_dollars_matches_too():
+    """Scale is inferred from the two sets, not assumed to be thousands."""
+    index = soi_html.build_index(soi_html.parse_table(schedule()))
+    position = _position("Acme Holdings, LLC, First Lien Term Loan",
+                         fair_value="9800", principal="10000")
+
+    soi_html.enrich([position], index)
+    assert position.maturity_date == date(2029, 6, 30)
 
 
 def test_an_unmatched_borrower_is_left_alone():

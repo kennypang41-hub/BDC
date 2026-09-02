@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from bdctracker import db, normalize
+from bdctracker import db, fx, normalize
 from bdctracker.config import check_sec_reachable, configure_edgar
 from bdctracker.models import Position
 from bdctracker.sources import dera, xbrl
@@ -41,6 +41,12 @@ def clean(positions: Sequence[Position]) -> list[Position]:
             normalize.apply_scale(group, factor)
 
     infer_accrual_status(by_filing.values())
+
+    # Restate local-currency principal in USD before anything divides by it or
+    # sums it. One request per balance-sheet date, cached across runs.
+    converted = fx.convert_positions(merged)
+    if converted:
+        log.info("restated %s local-currency principals in USD", converted)
 
     deduped = normalize.dedupe(merged)
     normalize.flag_quality(deduped)
@@ -78,7 +84,7 @@ def harvest_filings(
     forms: Sequence[str] = ("10-K", "10-Q"),
     limit_per_bdc: int | None = None,
     workers: int = 4,
-    with_schedule: bool = False,
+    with_schedule: bool = True,
 ) -> list[Position]:
     """Pull positions straight from filings, a few BDCs at a time.
 
@@ -122,6 +128,7 @@ def run(
     workers: int = 4,
     limit_per_bdc: int | None = None,
     preflight: bool = True,
+    with_schedule: bool = True,
 ) -> dict:
     """Build (or extend) the mark dataset.
 
@@ -164,6 +171,7 @@ def run(
                     since=since,
                     limit_per_bdc=limit_per_bdc,
                     workers=workers,
+                    with_schedule=with_schedule,
                 )
             )
 
