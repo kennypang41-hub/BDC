@@ -119,6 +119,12 @@ def canonical_country(value: str | None) -> str | None:
 
 _DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y%m%d", "%d-%b-%Y", "%b %d, %Y")
 
+#: Several filers print a month rather than a day — Ares dates every position
+#: "08/2025", and a term sheet's month is what a vintage or maturity cohort is
+#: built from anyway. These resolve to the first of that month, which is a
+#: statement about the month and not a claim about the day.
+_MONTH_FORMATS = ("%m/%Y", "%m-%Y", "%b %Y", "%B %Y", "%Y-%m")
+
 
 def to_decimal(value) -> Decimal | None:
     """Parse a money-ish value, tolerating "$1,234", "(500)" and blanks."""
@@ -170,6 +176,11 @@ def to_date(value) -> date | None:
             return datetime.strptime(text, "%Y%m%d").date()
         except ValueError:
             return None
+    for fmt in _MONTH_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
     return None
 
 

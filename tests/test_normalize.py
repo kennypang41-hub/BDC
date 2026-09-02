@@ -361,3 +361,34 @@ def test_no_denominator_in_the_right_currency_yields_no_mark():
     )
     assert position.mark_basis is None
     assert position.mark is None
+
+
+# ---------------------------------------------------------------------------
+# Dates printed as a month
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text,expected", [
+    ("08/2025",     date(2025, 8, 1)),
+    ("08/2032",     date(2032, 8, 1)),
+    ("12/2019",     date(2019, 12, 1)),
+    ("08-2025",     date(2025, 8, 1)),
+    ("Aug 2025",    date(2025, 8, 1)),
+    ("August 2025", date(2025, 8, 1)),
+    ("2025-08",     date(2025, 8, 1)),
+])
+def test_a_date_printed_as_a_month_resolves_to_that_month(text, expected):
+    """Ares dates every position "08/2025"; rejecting it emptied both columns."""
+    assert normalize.to_date(text) == expected
+
+
+@pytest.mark.parametrize("text", [
+    "SOFR (M)", "11.9", "(2)(9)", "—", "", "First lien senior secured loan", "4.50%",
+])
+def test_a_schedule_cell_that_is_not_a_date_stays_none(text):
+    """The month formats must not start reading rates and footnotes as dates."""
+    assert normalize.to_date(text) is None
+
+
+def test_a_full_date_is_still_read_as_the_day_it_names():
+    assert normalize.to_date("08/15/2025") == date(2025, 8, 15)
+    assert normalize.to_date("2025-08-15") == date(2025, 8, 15)
