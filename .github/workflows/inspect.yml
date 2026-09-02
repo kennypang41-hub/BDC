@@ -17,7 +17,7 @@ on:
       mode:
         description: "positions = raw rows for a borrower; concepts = what the filing tags"
         type: choice
-        options: ["positions", "concepts", "schedule"]
+        options: ["positions", "concepts", "schedule", "match"]
         required: false
         default: "positions"
       limit:
@@ -69,6 +69,8 @@ jobs:
         run: |
           if [ "$MODE" = "schedule" ]; then
             bdc schedule --ticker "$TICKER" --limit "$LIMIT" --debug | tee inspect.txt
+          elif [ "$MODE" = "match" ]; then
+            bdc schedule --ticker "$TICKER" --limit "$LIMIT" --match --show 0 | tee inspect.txt
           elif [ "$MODE" = "concepts" ]; then
             bdc concepts --ticker "$TICKER" --limit "$LIMIT" | tee inspect.txt
           else

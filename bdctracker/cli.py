@@ -263,6 +263,8 @@ def schedule(
     limit: int = typer.Option(1, help="How many recent filings to parse."),
     show: int = typer.Option(12, help="How many parsed rows to print."),
     debug: bool = typer.Option(False, help="Dump every table's header and classification."),
+    match: bool = typer.Option(False, help="Also pull the tagged positions and "
+                                           "report where the join loses them."),
 ) -> None:
     """Parse the printed Schedule of Investments and report what it yields.
 
@@ -298,6 +300,9 @@ def schedule(
             console.print("  [yellow]no schedule table recognised[/yellow]")
             continue
 
+        if match:
+            _report_match(filing, bdc, rows, soi_html)
+
         total = len(rows)
         have = {
             field: sum(1 for r in rows if getattr(r, field) is not None)
@@ -316,6 +321,26 @@ def schedule(
                 row.country or "-", str(row.maturity_date or "-"), str(row.acquisition_date or "-"),
             )
         console.print(table)
+
+
+def _report_match(filing, bdc, rows, soi_html) -> None:
+    """Show where the parsed rows and the tagged positions fail to meet."""
+    from bdctracker.sources import xbrl as xbrl_source
+
+    positions = xbrl_source.positions_from_xbrl(
+        filing.xbrl(), bdc.cik, accession=getattr(filing, "accession_no", None),
+    )
+    if not positions:
+        console.print("  [yellow]no tagged positions to match against[/yellow]")
+        return
+
+    report = soi_html.match_report(positions, soi_html.build_index(rows))
+    total = report["positions"] or 1
+    console.print(f"  [bold]join[/bold] scale={report['scale']!r} "
+                  f"parsed_rows={report['parsed_rows']:,} positions={total:,}")
+    for key in ("matched", "borrower_not_in_schedule", "position_unpriced",
+                "no_row_within_reach", "ambiguous"):
+        console.print(f"    {key:26} {report[key]:6,}  ({100 * report[key] / total:5.1f}%)")
 
 
 def _dump_tables(filing, soi_html, limit: int = 4) -> None:

@@ -568,6 +568,58 @@ def _pair_on_value(rows: list[SoiAttributes], positions: list, scale: float) -> 
     return pairs
 
 
+def match_report(positions, index: dict) -> dict:
+    """Count where the join loses positions, rather than guessing at it.
+
+    Two plausible explanations for Ares matching a third of what it parses —
+    the tolerance, then ties on a coarsely printed fair value — each survived a
+    full harvest and moved the number by nothing. So the funnel is measured:
+    every position is counted into exactly one outcome.
+    """
+    by_issuer = index.get("issuer", {})
+    grouped: dict[str, list] = {}
+    for position in positions:
+        grouped.setdefault(position.issuer_id, []).append(position)
+
+    pairs = [
+        (by_issuer[issuer_id], [p for p in holdings if p.fair_value is not None])
+        for issuer_id, holdings in grouped.items() if issuer_id in by_issuer
+    ]
+    scale = _choose_scale(pairs)
+
+    report = {
+        "positions": len(positions),
+        "parsed_rows": sum(len(rows) for rows in by_issuer.values()),
+        "scale": scale,
+        "borrower_not_in_schedule": 0,
+        "position_unpriced": 0,
+        "no_row_within_reach": 0,
+        "ambiguous": 0,
+        "matched": 0,
+    }
+    if scale is None:
+        report["borrower_not_in_schedule"] = len(positions)
+        return report
+
+    for issuer_id, holdings in grouped.items():
+        rows = by_issuer.get(issuer_id)
+        if not rows:
+            report["borrower_not_in_schedule"] += len(holdings)
+            continue
+        priced = [p for p in holdings if p.fair_value is not None]
+        report["position_unpriced"] += len(holdings) - len(priced)
+
+        matched = {id(p) for _, p in _pair_on_value(rows, priced, scale)}
+        report["matched"] += len(matched)
+        for position in priced:
+            if id(position) in matched:
+                continue
+            reachable = [r for r in rows if _within_reach(r, position, scale) is not None]
+            key = "ambiguous" if reachable else "no_row_within_reach"
+            report[key] += 1
+    return report
+
+
 def enrich(positions, index: dict) -> int:
     """Fill blank attributes on positions from the printed schedule.
 
