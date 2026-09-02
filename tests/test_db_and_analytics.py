@@ -283,3 +283,62 @@ def test_cohort_marks_use_the_same_rows_on_both_sides_of_the_ratio(conn):
     rows = {r["vintage_year"]: r for r in analytics.vintage_profile(conn)}
     assert rows[2022]["weighted_mark"] == pytest.approx(90.0)
     assert rows[2022]["positions"] == 1
+
+
+# ---------------------------------------------------------------------------
+# The denominator, in one place
+# ---------------------------------------------------------------------------
+
+def _sterling_book():
+    """A sterling loan valued in dollars, converted, alongside a dollar one."""
+    gbp = normalize.finalize(Position(
+        cik=ARCC.cik, period_end=Q2, identifier="RL Datix, First Lien Term Loan",
+        fair_value=Decimal("13000000"), principal=Decimal("10000000"),
+        cost=Decimal("12500000"),
+        fair_value_currency="USD", principal_currency="GBP",
+        principal_usd=13_200_000.0, fx_rate=0.7576, fx_date="2025-12-31",
+    ))
+    usd = normalize.finalize(Position(
+        cik=ARCC.cik, period_end=Q2, identifier="Acme Two, First Lien Term Loan",
+        fair_value=Decimal("9800000"), principal=Decimal("10000000"),
+        cost=Decimal("9950000"),
+        fair_value_currency="USD", principal_currency="USD",
+        principal_usd=10_000_000.0, fx_rate=1.0,
+    ))
+    return [gbp, usd]
+
+
+def test_a_sterling_loan_is_not_marked_at_the_exchange_rate(conn):
+    """13.0m of value over 10.0m of sterling par is 130 — a rate, not a mark."""
+    db.load_positions(conn, _sterling_book())
+    conn.commit()
+
+    row = conn.execute(
+        f"SELECT fair_value, {analytics.BASIS} AS basis FROM v_marks "
+        "WHERE identifier LIKE 'RL Datix%'"
+    ).fetchone()
+    assert row["basis"] == pytest.approx(13_200_000)
+    assert 100.0 * row["fair_value"] / row["basis"] == pytest.approx(98.5, abs=0.1)
+
+
+def test_the_workbook_divides_by_the_same_basis_the_site_does(conn):
+    """One definition of the denominator, shared rather than duplicated."""
+    from bdctracker import excel
+
+    db.load_positions(conn, _sterling_book())
+    conn.commit()
+    sql = excel.MARKS_SQL.format(unpriced="", basis=analytics.basis("m"))
+
+    from_site = {
+        (r["cik"], r["issuer_name"], r["period_end"], r["investment_type"], r["lien"]): r["basis"]
+        for r in conn.execute(f"SELECT *, {analytics.BASIS} AS basis FROM v_marks")
+    }
+    checked = 0
+    for row in conn.execute(sql, {}):
+        expected = from_site[(row["cik"], row["issuer_name"], row["period_end"], row["investment_type"], row["lien"])]
+        if expected is None:
+            assert row["mark_basis"] is None
+        else:
+            assert row["mark_basis"] == pytest.approx(expected)
+        checked += 1
+    assert checked == len(from_site)

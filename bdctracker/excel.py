@@ -113,15 +113,9 @@ SELECT
     m.principal, m.cost, m.fair_value, m.shares, m.principal_ccy, m.fair_value_ccy,
     m.principal_usd, m.fx_rate, m.fx_date,
     -- The denominator must share the numerator's currency, or the ratio is an
-    -- exchange rate rather than a mark.
-    -- Principal restated in USD where it needed restating; cost only where no
-    -- rate was available.
-    CASE WHEN COALESCE(m.principal_usd, 0) > 0 THEN m.principal_usd
-         WHEN m.principal > 0
-              AND (m.principal_ccy IS NULL OR m.fair_value_ccy IS NULL
-                   OR m.principal_ccy = m.fair_value_ccy)
-         THEN m.principal
-         ELSE m.cost END AS mark_basis,
+    -- exchange rate rather than a mark. One definition of it, in analytics, so
+    -- the workbook and the site cannot drift apart.
+    {basis} AS mark_basis,
     m.interest_rate, m.spread, m.reference_rate, m.pik_rate, m.pct_net_assets,
     m.maturity_date,
     COALESCE(m.acquisition_date, a.acquisition_date) AS acquisition_date,
@@ -180,7 +174,10 @@ def _write_marks(workbook: Workbook, conn: sqlite3.Connection,
     unrealised = _letter("Unrealised")
 
     blocks: dict[str, list[int]] = {}
-    sql = MARKS_SQL.format(unpriced="" if include_unpriced else UNPRICED_FILTER)
+    sql = MARKS_SQL.format(
+        unpriced="" if include_unpriced else UNPRICED_FILTER,
+        basis=analytics.basis("m"),
+    )
     row_number = 1
     for record in conn.execute(sql):
         row_number += 1
@@ -496,29 +493,39 @@ def _write_readme(workbook: Workbook, conn: sqlite3.Connection, period: str,
     line += 1
 
     put("What a mark is",
-        "Fair value divided by principal, as reported in the filing, times 100. "
+        "Fair value divided by principal, as reported in the filing, times 100 — with "
+        "principal restated in the fair value's currency first (see Currency below). "
         "100 means the BDC carries the loan at par; below 100 means it has written the "
         "position down. Equity has no principal, so it is marked against cost instead — "
-        "the 'Mark basis (fallback)' column holds that stand-in denominator.")
-    put("Sector and country",
-        "Both are sparse. Filers tag industry as a presentation grouping in the schedule "
-        "rather than as a dimension on the fair-value fact, so it reaches roughly 2% of "
-        "positions; geography is tagged on well under 1%. Blank means the filing did not "
-        "tag it — neither field is ever inferred.")
-    put("Maturity and vintage",
-        "Maturity comes from the tagged maturity date, or from the position label where a "
-        "filer printed one ('due 6/30/2029') without tagging it. Vintage is the year of the "
-        "tagged acquisition date and is never inferred: the quarter a position first appears "
-        "in this dataset is when coverage began, not when the loan was made, and treating "
-        "one as the other would put every legacy loan in the wrong cohort. Both are sparse "
-        "because many filers tag neither — Main Street's latest 10-Q, for one, tags fair "
-        "value, cost, principal, rates and shares per investment and nothing else. They are "
-        "printed in the schedule but not in the XBRL, so reaching them means parsing the "
-        "rendered table rather than reading a fact.")
+        "the 'Mark basis (fallback)' column holds that stand-in denominator, and the mark "
+        "column is a live formula so you can see and change what it divides by.")
+    put("Currency",
+        "Filers report fair value in dollars and principal in the loan's own currency, so "
+        "dividing one by the other returns an exchange rate rather than a mark — a sterling "
+        "loan came out at 130. 'Principal (USD)' restates principal at the European Central "
+        "Bank reference rate for the period end (the last published fixing on or before it, "
+        "since the ECB does not fix at weekends), and that is what the mark divides by. The "
+        "rate and its date sit beside it so the arithmetic can be checked, and the currency "
+        "of each side is shown. Where no rate was found the mark falls back to cost, which "
+        "filers report in the same currency as fair value.")
+    put("Sector, country, maturity and vintage",
+        "Filers tag industry as a presentation grouping inside the schedule rather than as a "
+        "dimension on the fair-value fact, and they tag maturity and acquisition dates barely "
+        "at all — Main Street's latest 10-Q tags fair value, cost, principal, rates and shares "
+        "per investment and nothing else. All four are printed in the Schedule of Investments, "
+        "so they are read from that table and matched back to the tagged position by the fair "
+        "value printed beside them. Coverage therefore varies by filer: about 99% of Blackstone "
+        "Secured Lending's positions carry an acquisition date and 90% a maturity, while a "
+        "filer whose schedule layout the parse does not reach carries only what it tagged. "
+        "Nothing is inferred. In particular a vintage is never taken from the quarter a "
+        "position first appears in this dataset — that is when coverage began, not when the "
+        "loan was made, and confusing the two would file every legacy loan in the wrong cohort. "
+        "Maturity also falls back to the position label where a filer printed 'due 6/30/2029' "
+        "without tagging it.")
     put("Principal",
-        "Principal outstanding as the filing reports it. Blank where the filer did not "
-        "tag it, in which case the mark falls back to cost and the row carries the "
-        "no_principal flag.")
+        "Principal outstanding as the filing reports it, in the currency it reports it in. "
+        "Blank where the filer did not tag it, in which case the mark falls back to cost and "
+        "the row carries the no_principal flag.")
     put("Grain",
         "One row per (loan, quarter) on the Marks sheet, for every position the filing "
         "gave a fair value. Positions reported without one are not marks and are left out "
