@@ -567,3 +567,72 @@ def test_a_tie_the_other_figures_cannot_break_is_still_refused():
     soi_html.enrich([position], index)
     assert position.acquisition_date is None
     assert position.industry == "Software"
+
+
+# ---------------------------------------------------------------------------
+# A year, where an exact date cannot be pinned to a facility
+# ---------------------------------------------------------------------------
+
+def one_vintage_schedule() -> FakeTable:
+    """Two facilities drawn in the same year, on different days."""
+    return FakeTable(
+        headers=HEADERS,
+        rows=[
+            _row("Software", "", "", "", "", "", "", spans=[7, 1, 1, 1, 1, 1, 1]),
+            _row("Twin Facilities Inc.", "First Lien Term Loan", "03/2021",
+                 "01/2027", "5.0", "5.0", "5.0"),
+            _row("Twin Facilities Inc.", "Delayed Draw Term Loan", "09/2021",
+                 "01/2027", "5.0", "5.0", "5.0"),
+            _row("Other Borrower LLC", "First Lien Term Loan", "03/2019",
+                 "03/2028", "9.0", "9.0", "8.9"),
+        ],
+    )
+
+
+def test_a_facility_no_row_can_be_pinned_to_still_gets_its_year():
+    """The tie blocks the date; both rows agree on the year, so that survives."""
+    index = soi_html.build_index(soi_html.parse_table(one_vintage_schedule()))
+    position = _position("Twin Facilities Inc., First Lien Term Loan",
+                         fair_value="5000000", principal="5000000")
+    position.cost = Decimal("5000000")
+
+    soi_html.enrich([position], index)
+    assert position.acquisition_date is None      # no row pinned to this facility
+    assert position.vintage_year == 2021          # ...and the year is not in doubt
+    assert position.maturity_year == 2027
+
+
+def test_a_facility_the_schedule_never_prices_still_gets_its_year():
+    """A year needs no value match at all — it is a fact about the borrower."""
+    index = soi_html.build_index(soi_html.parse_table(one_vintage_schedule()))
+    unpriced = _position("Twin Facilities Inc., Revolver", fair_value="7777777")
+
+    soi_html.enrich([unpriced], index)
+    assert unpriced.vintage_year == 2021
+
+
+def test_a_borrower_with_two_vintages_gets_neither():
+    """A 2019 loan and a 2025 add-on are two cohorts; picking one is a guess."""
+    index = soi_html.build_index(soi_html.parse_table(schedule()))
+    rows = soi_html.parse_table(schedule())
+    assert {r.acquisition_date.year for r in rows if r.issuer.startswith("Acme")} == {2021}
+
+    mixed = [
+        soi_html.SoiAttributes(issuer="Acme Holdings, LLC",
+                               acquisition_date=date(2019, 1, 1)),
+        soi_html.SoiAttributes(issuer="Acme Holdings, LLC",
+                               acquisition_date=date(2025, 1, 1)),
+    ]
+    position = _position("Acme Holdings, LLC, Revolver", fair_value="1")
+    soi_html.enrich([position], soi_html.build_index(mixed))
+    assert position.vintage_year is None
+
+
+def test_an_exact_date_is_never_replaced_by_a_year():
+    index = soi_html.build_index(soi_html.parse_table(millions_schedule()))
+    position = _position("Hyphen Solutions, LLC, First Lien Term Loan",
+                         fair_value="11847000", principal="11900000")
+    soi_html.enrich([position], index)
+    assert position.acquisition_date == date(2025, 8, 1)
+    assert position.year_acquired is None  # the date already answers it
+    assert position.vintage_year == 2025

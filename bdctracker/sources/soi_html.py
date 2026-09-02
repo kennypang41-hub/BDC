@@ -620,6 +620,23 @@ def match_report(positions, index: dict) -> dict:
     return report
 
 
+def _agreed_year(rows: list[SoiAttributes], field: str) -> int | None:
+    """The year every row of a borrower gives, when they all give the same one.
+
+    Matching a printed row to one tagged facility needs the two to agree on a
+    value, and most of what the join loses is lost there. A year rarely needs
+    that: a borrower's facilities are typically drawn and dated together, so
+    where the schedule's rows for it agree, the year is a fact about the
+    borrower and no row-level match is required to apply it.
+
+    Disagreement is left alone rather than resolved by majority — a borrower
+    with a 2019 loan and a 2025 add-on has two vintages, and picking one would
+    file half its book in the wrong cohort.
+    """
+    years = {getattr(row, field).year for row in rows if getattr(row, field)}
+    return years.pop() if len(years) == 1 else None
+
+
 def enrich(positions, index: dict) -> int:
     """Fill blank attributes on positions from the printed schedule.
 
@@ -668,6 +685,20 @@ def enrich(positions, index: dict) -> int:
                 if position.acquisition_date is None and row.acquisition_date:
                     position.acquisition_date = row.acquisition_date
                     touched.add(id(position))
+
+        # A year the borrower's rows all agree on needs no row-level match, so
+        # it survives the two cases that lose an exact date: a facility no
+        # printed row can be pinned to, and a tie between rows that name
+        # different days of the same year.
+        acquired = _agreed_year(rows, "acquisition_date")
+        matures = _agreed_year(rows, "maturity_date")
+        for position in holdings:
+            if acquired and position.vintage_year is None:
+                position.year_acquired = acquired
+                touched.add(id(position))
+            if matures and position.maturity_year is None:
+                position.year_matures = matures
+                touched.add(id(position))
 
         for position in holdings:
             if id(position) in touched:

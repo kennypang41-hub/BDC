@@ -49,6 +49,11 @@ class Position:
 
     maturity_date: date | None = None
     acquisition_date: date | None = None
+    #: Where the schedule pins a position to a year but not to a row, the year
+    #: is kept on its own rather than invented into a date. A cohort is built
+    #: from the year anyway, and half a fact beats none.
+    year_acquired: int | None = None
+    year_matures: int | None = None
     fair_value_level: str | None = None
     is_non_accrual: bool | None = None
 
@@ -122,16 +127,22 @@ class Position:
     def vintage_year(self) -> int | None:
         """The year the BDC acquired the position, where the filing says so.
 
-        Only ever the tagged acquisition date. The quarter a position first
-        appears in this dataset is not its vintage — it is the quarter our
-        coverage began — and reporting one as the other would put every legacy
-        loan in the wrong cohort.
+        The acquisition date where one was matched to this exact facility, and
+        otherwise the year the schedule gives the borrower when all of its rows
+        agree on one. Never the quarter a position first appears in this
+        dataset — that is when our coverage began, not when the loan was made,
+        and reporting one as the other would put every legacy loan in the wrong
+        cohort.
         """
-        return self.acquisition_date.year if self.acquisition_date else None
+        if self.acquisition_date:
+            return self.acquisition_date.year
+        return self.year_acquired
 
     @property
     def maturity_year(self) -> int | None:
-        return self.maturity_date.year if self.maturity_date else None
+        if self.maturity_date:
+            return self.maturity_date.year
+        return self.year_matures
 
     @property
     def unrealized(self) -> Decimal | None:

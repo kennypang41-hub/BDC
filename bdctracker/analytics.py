@@ -515,10 +515,14 @@ def vintage_profile(conn: sqlite3.Connection, period: str | None = None) -> list
             JOIN latest l ON l.loan_id = v.loan_id AND l.period_end = v.period_end
         ), vintages AS (
             -- A loan tagged in any quarter keeps that vintage in every other.
-            SELECT loan_id, MIN(acquisition_date) AS acquisition_date
-            FROM marks WHERE acquisition_date IS NOT NULL GROUP BY loan_id
+            SELECT loan_id,
+                   MIN(COALESCE(CAST(substr(acquisition_date, 1, 4) AS INTEGER),
+                                year_acquired)) AS vintage_year
+            FROM marks
+            WHERE acquisition_date IS NOT NULL OR year_acquired IS NOT NULL
+            GROUP BY loan_id
         )
-        SELECT CAST(substr(vintages.acquisition_date, 1, 4) AS INTEGER) AS vintage_year,
+        SELECT vintages.vintage_year AS vintage_year,
                COUNT(*)        AS positions,
                SUM(fair_value) AS fair_value,
                SUM({BASIS})    AS basis,
@@ -543,7 +547,8 @@ def maturity_profile(conn: sqlite3.Connection, period: str | None = None) -> lis
     return _rows(
         conn,
         f"""
-        SELECT CAST(substr(maturity_date, 1, 4) AS INTEGER) AS maturity_year,
+        SELECT COALESCE(CAST(substr(maturity_date, 1, 4) AS INTEGER),
+                        year_matures)                       AS maturity_year,
                COUNT(*)        AS positions,
                SUM(fair_value) AS fair_value,
                SUM({BASIS})    AS basis,

@@ -100,6 +100,8 @@ MARKS_SQL = """
 WITH loan_attributes AS (
     SELECT loan_id,
            MIN(acquisition_date) AS acquisition_date,
+           MIN(year_acquired)    AS year_acquired,
+           MIN(year_matures)     AS year_matures,
            MIN(industry)         AS industry,
            MIN(country)          AS country
     FROM marks
@@ -121,9 +123,12 @@ SELECT
     COALESCE(m.acquisition_date, a.acquisition_date) AS acquisition_date,
     COALESCE(m.country, a.country)                   AS country,
     m.fair_value_level,
-    CAST(substr(m.maturity_date, 1, 4) AS INTEGER) AS maturity_year,
-    CAST(substr(COALESCE(m.acquisition_date, a.acquisition_date), 1, 4) AS INTEGER)
-        AS vintage_year,
+    -- The date's year where a printed row was matched to this facility, and
+    -- otherwise the year the schedule gave the borrower.
+    COALESCE(CAST(substr(m.maturity_date, 1, 4) AS INTEGER),
+             m.year_matures, a.year_matures)                  AS maturity_year,
+    COALESCE(CAST(substr(COALESCE(m.acquisition_date, a.acquisition_date), 1, 4) AS INTEGER),
+             m.year_acquired, a.year_acquired)                AS vintage_year,
     CASE WHEN m.is_non_accrual = 1 THEN 'Yes'
          WHEN m.is_non_accrual = 0 THEN 'No'
          ELSE 'Not disclosed' END AS non_accrual_text,
